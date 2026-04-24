@@ -126,7 +126,43 @@ const initAuth = (clientId, resolve) => {
       }
     },
   });
-  client.requestAccessToken();
+
+  // Hiển thị một Dialog trên UI để ép người dùng phải "Tương tác thực sự" (Click)
+  // Việc này lách luật Safari/PWA chặn popup khi chạy hàm async quá lâu
+  const overlay = document.createElement('div');
+  overlay.style.cssText = 'position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(0,0,0,0.6);z-index:999999;display:flex;align-items:center;justify-content:center;';
+  
+  const modal = document.createElement('div');
+  modal.style.cssText = 'background:#fff;padding:24px;border-radius:12px;text-align:center;font-family:sans-serif;max-width:80%;box-shadow:0 10px 25px rgba(0,0,0,0.2)';
+  
+  const text = document.createElement('p');
+  text.innerText = 'Hệ thống cần cấp quyền Google Drive để tiếp tục. Vui lòng nhấn "Kết nối" (chỉ 1 lần duy nhất).';
+  text.style.cssText = 'margin:0 0 20px 0;color:#333;font-size:16px;line-height:1.5';
+  
+  const btnGroup = document.createElement('div');
+  
+  const btn = document.createElement('button');
+  btn.innerText = 'Kết nối Drive';
+  btn.style.cssText = 'background:#1a73e8;color:#fff;border:none;padding:10px 20px;border-radius:6px;font-size:15px;cursor:pointer;font-weight:500;';
+  btn.onclick = () => {
+    client.requestAccessToken();
+    document.body.removeChild(overlay);
+  };
+  
+  const cancelBtn = document.createElement('button');
+  cancelBtn.innerText = 'Hủy';
+  cancelBtn.style.cssText = 'background:#f1f3f4;color:#5f6368;border:none;padding:10px 20px;border-radius:6px;font-size:15px;cursor:pointer;font-weight:500;margin-left:12px;';
+  cancelBtn.onclick = () => {
+    document.body.removeChild(overlay);
+    resolve(null);
+  };
+  
+  btnGroup.appendChild(btn);
+  btnGroup.appendChild(cancelBtn);
+  modal.appendChild(text);
+  modal.appendChild(btnGroup);
+  overlay.appendChild(modal);
+  document.body.appendChild(overlay);
 };
 
 // --- Service Account Flow (JWT RS256) ---
