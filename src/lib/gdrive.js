@@ -43,13 +43,13 @@ export const uploadToGDrive = async (file, folderId, clientId, apiKey, authType 
 
   if (!response.ok) {
     if (response.status === 401) {
-      sessionStorage.removeItem('gdrive_token');
-      sessionStorage.removeItem('gdrive_service_token');
+      localStorage.removeItem('gdrive_token');
+      localStorage.removeItem('gdrive_service_token');
       return uploadToGDrive(file, folderId, clientId, apiKey, authType, serviceJson);
     }
     if (response.status === 404) {
-      sessionStorage.removeItem('gdrive_token');
-      sessionStorage.removeItem('gdrive_service_token');
+      localStorage.removeItem('gdrive_token');
+      localStorage.removeItem('gdrive_service_token');
       throw new Error(`Thư mục Drive (${cleanFolderId}) không tìm thấy hoặc bạn không có quyền truy cập. Vui lòng kết nối lại tài khoản.`);
     }
     const err = await response.json();
@@ -90,14 +90,14 @@ if (typeof window !== 'undefined' && window.location.hash.includes('access_token
   const params = new URLSearchParams(hash);
   const accessToken = params.get('access_token');
   if (accessToken) {
-    sessionStorage.setItem('gdrive_token', accessToken);
+    localStorage.setItem('gdrive_token', accessToken);
     window.history.replaceState(null, '', window.location.pathname + window.location.search);
   }
 }
 
 // --- OAuth Flow ---
 export const getOAuthToken = (clientId) => {
-  let token = sessionStorage.getItem('gdrive_token');
+  let token = localStorage.getItem('gdrive_token');
   if (token) return Promise.resolve(token);
 
   return new Promise((resolve) => {
@@ -116,13 +116,12 @@ const initAuth = (clientId, resolve) => {
   const client = window.google.accounts.oauth2.initTokenClient({
     client_id: clientId,
     scope: SCOPES,
-    ux_mode: 'redirect',
-    redirect_uri: window.location.origin + window.location.pathname,
+    ux_mode: 'popup',
     callback: (response) => {
       if (response.error) {
         resolve(null);
       } else {
-        sessionStorage.setItem('gdrive_token', response.access_token);
+        localStorage.setItem('gdrive_token', response.access_token);
         resolve(response.access_token);
       }
     },
@@ -132,7 +131,7 @@ const initAuth = (clientId, resolve) => {
 
 // --- Service Account Flow (JWT RS256) ---
 const getServiceAccountToken = async (json) => {
-  const cached = sessionStorage.getItem('gdrive_service_token');
+  const cached = localStorage.getItem('gdrive_service_token');
   if (cached) {
     const { token, expiry } = JSON.parse(cached);
     if (Date.now() < expiry - 60000) return token;
@@ -166,7 +165,7 @@ const getServiceAccountToken = async (json) => {
 
   const data = await response.json();
   if (data.access_token) {
-    sessionStorage.setItem('gdrive_service_token', JSON.stringify({
+    localStorage.setItem('gdrive_service_token', JSON.stringify({
       token: data.access_token,
       expiry: Date.now() + (data.expires_in * 1000)
     }));
@@ -219,8 +218,8 @@ export const deleteFromGDrive = async (fileId, clientId, apiKey, authType = 'oau
 
   if (!resp.ok) {
     if (resp.status === 401) {
-      sessionStorage.removeItem('gdrive_token');
-      sessionStorage.removeItem('gdrive_service_token');
+      localStorage.removeItem('gdrive_token');
+      localStorage.removeItem('gdrive_service_token');
       // Retry
       return deleteFromGDrive(fileId, clientId, apiKey, authType, serviceJson);
     }
