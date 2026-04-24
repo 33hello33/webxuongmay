@@ -84,6 +84,17 @@ export const uploadToGDrive = async (file, folderId, clientId, apiKey, authType 
   };
 };
 
+// --- NEW: Parse redirect token from URL hash on load ---
+if (typeof window !== 'undefined' && window.location.hash.includes('access_token=')) {
+  const hash = window.location.hash.substring(1);
+  const params = new URLSearchParams(hash);
+  const accessToken = params.get('access_token');
+  if (accessToken) {
+    sessionStorage.setItem('gdrive_token', accessToken);
+    window.history.replaceState(null, '', window.location.pathname + window.location.search);
+  }
+}
+
 // --- OAuth Flow ---
 export const getOAuthToken = (clientId) => {
   let token = sessionStorage.getItem('gdrive_token');
@@ -105,6 +116,8 @@ const initAuth = (clientId, resolve) => {
   const client = window.google.accounts.oauth2.initTokenClient({
     client_id: clientId,
     scope: SCOPES,
+    ux_mode: 'redirect',
+    redirect_uri: window.location.origin + window.location.pathname,
     callback: (response) => {
       if (response.error) {
         resolve(null);
