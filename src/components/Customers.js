@@ -124,7 +124,7 @@ function Customers() {
       </div>
 
       {showModal && createPortal(
-        <div className="modal-overlay" onClick={() => setShowModal(false)}>
+        <div className="modal-overlay">
           <div className="modal-container" onClick={e => e.stopPropagation()}>
             <button className="modal-close" onClick={() => setShowModal(false)}>
               <X size={20} />

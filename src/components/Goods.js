@@ -129,6 +129,7 @@ function Goods() {
         resetForm();
       }
     } else if (showModal === 'edit_product') {
+      productData.quantity = formData.quantity;
       const { error } = await supabase
         .from('products')
         .update(productData)
@@ -160,11 +161,56 @@ function Goods() {
     setLoading(false);
   };
 
+  const smartUpdateQuantity = (current, delta, isAdd) => {
+    const parse = (str) => {
+      const list = [];
+      const map = {};
+      const regex = /(\d+(?:\.\d+)?)\s*(\D+?)(?=\s*\d|$)/g;
+      let match;
+      while ((match = regex.exec(str)) !== null) {
+        const val = parseFloat(match[1]);
+        const unit = match[2].trim().toLowerCase();
+        if (!unit) continue;
+        if (map[unit] === undefined) {
+          list.push(unit);
+          map[unit] = val;
+        } else {
+          map[unit] += val;
+        }
+      }
+      return { list, map };
+    };
+
+    const curr = parse(current || "");
+    const dlt = parse(delta || "");
+
+    if (dlt.list.length === 0) return current;
+
+    dlt.list.forEach(unit => {
+      if (curr.map[unit] === undefined) {
+        curr.list.push(unit);
+        curr.map[unit] = isAdd ? dlt.map[unit] : -dlt.map[unit];
+      } else {
+        curr.map[unit] += isAdd ? dlt.map[unit] : -dlt.map[unit];
+      }
+    });
+
+    return curr.list
+      .map(unit => {
+        const v = curr.map[unit];
+        const displayVal = Number.isInteger(v) ? v : v.toFixed(2).replace(/\.?0+$/, "");
+        return `${displayVal} ${unit}`;
+      })
+      .join(' ');
+  };
+
   const handleTransaction = async (e) => {
     e.preventDefault();
     setLoading(true);
     const type = showModal; // 'import' or 'export'
     const qtyText = formData.quantity;
+    const prevQty = selectedProduct?.quantity || "";
+    const newQty = smartUpdateQuantity(prevQty, qtyText, type === 'import');
 
     // 1. Create transaction record
     const { error: txError } = await supabase.from('transactions').insert([
@@ -172,14 +218,17 @@ function Goods() {
         product_id: selectedProduct?.id,
         type,
         quantity: qtyText,
+        prev_quantity: prevQty,
+        new_quantity: newQty,
         date: new Date().toISOString(),
         buyer_id: type === 'export' ? formData.buyer_id : null
       }
     ]);
 
-    // 2. Note: We don't automatically update quantity because it's text now
-    // The user should update the product quantity manually via Edit if needed,
-    // or we can add a quick update field here. For simplicity, we just log the transaction.
+    // 2. Smart update product quantity
+    if (!txError && selectedProduct) {
+      await supabase.from('products').update({ quantity: newQty }).eq('id', selectedProduct.id);
+    }
 
     if (!txError) {
       setShowModal(null);
@@ -266,11 +315,11 @@ function Goods() {
                     <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                       <div style={{ width: '150px', height: '150px', background: '#f1f5f9', borderRadius: '16px', overflow: 'hidden', flexShrink: 0 }}>
                         {p.image_url && (
-                          <img 
-                            src={p.image_url} 
-                            alt="" 
+                          <img
+                            src={p.image_url}
+                            alt=""
                             referrerPolicy="no-referrer"
-                            style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
+                            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                           />
                         )}
                       </div>
@@ -325,11 +374,11 @@ function Goods() {
               <div key={p.id} className="mobile-table-card">
                 <div style={{ display: 'flex', gap: '12px' }}>
                   <div style={{ width: '150px', height: '150px', background: '#f1f5f9', borderRadius: '16px', overflow: 'hidden', flexShrink: 0 }}>
-                    {p.image_url && <img 
-                      src={p.image_url} 
-                      alt="" 
+                    {p.image_url && <img
+                      src={p.image_url}
+                      alt=""
                       referrerPolicy="no-referrer"
-                      style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
+                      style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                     />}
                   </div>
                   <div style={{ flex: 1 }}>
@@ -391,6 +440,7 @@ function Goods() {
                 <th style={{ textAlign: 'left', padding: '1rem', color: 'var(--text-muted)', fontSize: '0.75rem', textTransform: 'uppercase' }}>Hàng hóa</th>
                 <th style={{ textAlign: 'center', padding: '1rem', color: 'var(--text-muted)', fontSize: '0.75rem', textTransform: 'uppercase' }}>Loại</th>
                 <th style={{ textAlign: 'center', padding: '1rem', color: 'var(--text-muted)', fontSize: '0.75rem', textTransform: 'uppercase' }}>Số lượng</th>
+                <th style={{ textAlign: 'center', padding: '1rem', color: 'var(--text-muted)', fontSize: '0.75rem', textTransform: 'uppercase' }}>Trước → Sau</th>
                 <th style={{ textAlign: 'left', padding: '1rem', color: 'var(--text-muted)', fontSize: '0.75rem', textTransform: 'uppercase' }}>Người mua</th>
               </tr>
             </thead>
@@ -408,6 +458,11 @@ function Goods() {
                     </div>
                   </td>
                   <td style={{ padding: '1rem', textAlign: 'center', fontWeight: '700' }}>{t.quantity}</td>
+                  <td style={{ padding: '1rem', textAlign: 'center', fontSize: '0.875rem' }}>
+                    <span style={{ color: 'var(--text-muted)' }}>{t.prev_quantity || '—'}</span>
+                    <span style={{ margin: '0 8px', color: 'var(--primary)' }}>→</span>
+                    <span style={{ fontWeight: '600' }}>{t.new_quantity || '—'}</span>
+                  </td>
                   <td style={{ padding: '1rem', color: 'var(--text-muted)' }}>{t.customers?.name || '—'}</td>
                 </tr>
               ))}
@@ -417,7 +472,7 @@ function Goods() {
       )}
 
       {showModal && createPortal(
-        <div className="modal-overlay" onClick={() => setShowModal(null)}>
+        <div className="modal-overlay">
           <div className="modal-container" onClick={e => e.stopPropagation()}>
             <button className="modal-close" onClick={() => setShowModal(null)}>
               <X size={20} />
@@ -444,7 +499,7 @@ function Goods() {
                       <label htmlFor="is_low_stock" style={{ fontSize: '0.875rem', fontWeight: '500', cursor: 'pointer' }}>Sắp hết hàng</label>
                     </div>
                   </div>
-                  <div><label style={{ display: 'block', marginBottom: '4px', fontSize: '0.875rem', fontWeight: '500' }}>Người mua (Text)</label><input placeholder="Tên khách hàng..." value={formData.buyer} onChange={e => setFormData({ ...formData, buyer: e.target.value })} /></div>
+                  <div><label style={{ display: 'block', marginBottom: '4px', fontSize: '0.875rem', fontWeight: '500' }}>Người mua (Text)</label><input defaultValue="của mình" value={formData.buyer} onChange={e => setFormData({ ...formData, buyer: e.target.value })} /></div>
                   <div><label style={{ display: 'block', marginBottom: '4px', fontSize: '0.875rem', fontWeight: '500' }}>Tags (cách nhau bởi dấu phẩy)</label><input placeholder="Vải, Cotton, Mùa hè..." value={formData.tags} onChange={e => setFormData({ ...formData, tags: e.target.value })} /></div>
                   <div>
                     <label style={{ display: 'block', marginBottom: '4px', fontSize: '0.875rem', fontWeight: '500' }}>Hình ảnh sản phẩm</label>
@@ -465,11 +520,11 @@ function Goods() {
                         }}
                       >
                         {imagePreview ? (
-                          <img 
-                            src={imagePreview} 
-                            alt="Preview" 
+                          <img
+                            src={imagePreview}
+                            alt="Preview"
                             referrerPolicy="no-referrer"
-                            style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
+                            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                           />
                         ) : (
                           <Plus size={24} color="var(--text-muted)" />
@@ -531,7 +586,7 @@ function Goods() {
       )}
 
       {showHistory && createPortal(
-        <div className="modal-overlay" onClick={() => setShowHistory(false)}>
+        <div className="modal-overlay">
           <div className="modal-container" style={{ maxWidth: '800px' }} onClick={e => e.stopPropagation()}>
             <button className="modal-close" onClick={() => setShowHistory(false)}>
               <X size={20} />
@@ -552,7 +607,8 @@ function Goods() {
                   <tr>
                     <th style={{ textAlign: 'left', padding: '1rem', color: 'var(--text-muted)', fontSize: '0.75rem', textTransform: 'uppercase' }}>Thời gian</th>
                     <th style={{ textAlign: 'center', padding: '1rem', color: 'var(--text-muted)', fontSize: '0.75rem', textTransform: 'uppercase' }}>Loại</th>
-                    <th style={{ textAlign: 'center', padding: '1rem', color: 'var(--text-muted)', fontSize: '0.75rem', textTransform: 'uppercase' }}>Số lượng</th>
+                    <th style={{ textAlign: 'center', padding: '1rem', color: 'var(--text-muted)', fontSize: '0.75rem', textTransform: 'uppercase' }}>Thay đổi</th>
+                    <th style={{ textAlign: 'center', padding: '1rem', color: 'var(--text-muted)', fontSize: '0.75rem', textTransform: 'uppercase' }}>Trước → Sau</th>
                     <th style={{ textAlign: 'left', padding: '1rem', color: 'var(--text-muted)', fontSize: '0.75rem', textTransform: 'uppercase' }}>Ghi chú / Khách</th>
                   </tr>
                 </thead>
@@ -575,6 +631,11 @@ function Goods() {
                         </span>
                       </td>
                       <td style={{ padding: '1rem', textAlign: 'center', fontWeight: '700' }}>{t.quantity}</td>
+                      <td style={{ padding: '1rem', textAlign: 'center', fontSize: '0.875rem' }}>
+                        <div style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>{t.prev_quantity || '—'}</div>
+                        <div style={{ margin: '2px 0', lineHeight: 1, color: 'var(--primary)' }}>↓</div>
+                        <div style={{ fontWeight: '600', color: 'var(--text-main)' }}>{t.new_quantity || '—'}</div>
+                      </td>
                       <td style={{ padding: '1rem', fontSize: '0.875rem', color: 'var(--text-muted)' }}>
                         {t.customers?.name || t.notes || '—'}
                       </td>
