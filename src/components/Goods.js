@@ -17,6 +17,7 @@ function Goods() {
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [filterDate, setFilterDate] = useState('');
 
   // Form states
   const [formData, setFormData] = useState({
@@ -242,14 +243,28 @@ function Goods() {
   };
 
   const getFilteredProducts = () => {
-    if (!searchQuery.trim()) return products;
-    const searchTags = searchQuery.toLowerCase().split(/[\s,]+/).filter(t => t.length > 0);
-    
-    return products.filter(product => {
+    let result = products;
+
+    if (filterDate) {
+      result = result.filter(p => p.created_at && format(new Date(p.created_at), 'yyyy-MM-dd') === filterDate);
+    }
+
+    if (!searchQuery.trim()) return result;
+    const searchTerms = searchQuery.toLowerCase().split(/[\s,]+/).filter(t => t.length > 0);
+
+    return result.filter(product => {
       const productTags = (product.tags || []).map(t => t.toLowerCase());
-      // Every search tag must be found (as a substring or exact) in at least one product tag
-      return searchTags.every(st => 
-        productTags.some(pt => pt.includes(st))
+      const buyer = (product.buyer || '').toLowerCase();
+      const description = (product.description || '').toLowerCase();
+      const name = (product.name || '').toLowerCase();
+      const dateStr = product.created_at ? format(new Date(product.created_at), 'dd/MM/yyyy') : '';
+
+      return searchTerms.every(term =>
+        productTags.some(tag => tag.includes(term)) ||
+        buyer.includes(term) ||
+        description.includes(term) ||
+        name.includes(term) ||
+        dateStr.includes(term)
       );
     });
   };
@@ -257,7 +272,7 @@ function Goods() {
   const filtered = getFilteredProducts();
 
   const resetForm = () => {
-    setFormData({ name: '', description: '', min_quantity: 5, tags: '', image_url: '', quantity: '', buyer: '', is_low_stock: false });
+    setFormData({ name: '', description: '', min_quantity: 5, tags: '', image_url: '', quantity: '', buyer: 'của mình', is_low_stock: false });
     setSelectedProduct(null);
     setImageFile(null);
     setImagePreview(null);
@@ -275,15 +290,27 @@ function Goods() {
       </div>
 
       {view === 'list' && (
-        <div className="search-box card" style={{ padding: '0.5rem 1rem', display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '1.5rem', maxWidth: '400px' }}>
-          <Search size={20} color="var(--text-muted)" />
-          <input
-            type="text"
-            placeholder="Tìm theo tag..."
-            style={{ border: 'none', background: 'transparent', padding: '0.5rem 0', width: '100%' }}
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-          />
+        <div style={{ display: 'flex', gap: '15px', marginBottom: '1.5rem', flexWrap: 'wrap' }}>
+          <div className="search-box card" style={{ padding: '0.5rem 1rem', display: 'flex', alignItems: 'center', gap: '10px', flex: 1, minWidth: '300px', margin: 0 }}>
+            <Search size={20} color="var(--text-muted)" />
+            <input
+              type="text"
+              placeholder="Tìm theo tên, tag, người mua, mô tả, ngày..."
+              style={{ border: 'none', background: 'transparent', padding: '0.5rem 0', width: '100%' }}
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+          </div>
+          <div className="card" style={{ padding: '0.5rem 1rem', display: 'flex', alignItems: 'center', gap: '10px', margin: 0 }}>
+            <Clock size={20} color="var(--text-muted)" />
+            <input
+              type="date"
+              value={filterDate}
+              onChange={e => setFilterDate(e.target.value)}
+              style={{ border: 'none', background: 'transparent', color: 'var(--text-main)', outline: 'none' }}
+            />
+            {filterDate && <X size={16} onClick={() => setFilterDate('')} style={{ cursor: 'pointer', color: '#ef4444' }} />}
+          </div>
         </div>
       )}
 
@@ -485,20 +512,32 @@ function Goods() {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                   <div><label style={{ display: 'block', marginBottom: '4px', fontSize: '0.875rem', fontWeight: '500' }}>Tên hàng hóa</label><input required value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} /></div>
                   <div><label style={{ display: 'block', marginBottom: '4px', fontSize: '0.875rem', fontWeight: '500' }}>Mô tả</label><textarea value={formData.description} onChange={e => setFormData({ ...formData, description: e.target.value })} /></div>
-                  <div className="grid grid-2">
-                    <div><label style={{ display: 'block', marginBottom: '4px', fontSize: '0.875rem', fontWeight: '500' }}>{showModal === 'add_product' ? 'Tồn ban đầu' : 'Số lượng hiện tại'}</label><input type="text" placeholder="VD: 10 cuộn, 5kg..." value={formData.quantity} onChange={e => setFormData({ ...formData, quantity: e.target.value })} /></div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', paddingTop: '24px' }}>
+                  <div style={{ display: 'flex', gap: '1rem', alignItems: 'flex-end', justifyContent: 'space-between' }}>
+                    <div style={{ flex: 1 }}>
+                      <label style={{ display: 'block', marginBottom: '4px', fontSize: '0.875rem', fontWeight: '500' }}>
+                        {showModal === 'add_product' ? 'Tồn ban đầu' : 'Số lượng hiện tại'}
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="VD: 10 cuộn, 5kg..."
+                        value={formData.quantity}
+                        onChange={e => setFormData({ ...formData, quantity: e.target.value })}
+                      />
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', paddingBottom: '12px', flexShrink: 0 }}>
                       <input
                         type="checkbox"
                         id="is_low_stock"
-                        style={{ width: '20px', height: '20px' }}
+                        style={{ width: '18px', height: '18px', cursor: 'pointer', margin: 0 }}
                         checked={formData.is_low_stock}
                         onChange={e => setFormData({ ...formData, is_low_stock: e.target.checked })}
                       />
-                      <label htmlFor="is_low_stock" style={{ fontSize: '0.875rem', fontWeight: '500', cursor: 'pointer' }}>Sắp hết hàng</label>
+                      <label htmlFor="is_low_stock" style={{ fontSize: '0.875rem', fontWeight: '500', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                        Sắp hết
+                      </label>
                     </div>
                   </div>
-                  <div><label style={{ display: 'block', marginBottom: '4px', fontSize: '0.875rem', fontWeight: '500' }}>Người mua (Text)</label><input defaultValue="của mình" value={formData.buyer} onChange={e => setFormData({ ...formData, buyer: e.target.value })} /></div>
+                  <div><label style={{ display: 'block', marginBottom: '4px', fontSize: '0.875rem', fontWeight: '500' }}>Người mua (Text)</label><input value={formData.buyer} onChange={e => setFormData({ ...formData, buyer: e.target.value })} /></div>
                   <div><label style={{ display: 'block', marginBottom: '4px', fontSize: '0.875rem', fontWeight: '500' }}>Tags (cách nhau bởi dấu phẩy)</label><input placeholder="Vải, Cotton, Mùa hè..." value={formData.tags} onChange={e => setFormData({ ...formData, tags: e.target.value })} /></div>
                   <div>
                     <label style={{ display: 'block', marginBottom: '4px', fontSize: '0.875rem', fontWeight: '500' }}>Hình ảnh sản phẩm</label>

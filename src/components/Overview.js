@@ -40,7 +40,7 @@ function Overview() {
       .select('*')
       .eq('type', 'shipping')
       .neq('status', 'đã gửi');
-    
+
     if (shippingData) {
       setShippingCount(shippingData.length);
       // Filter for specific in-progress statuses
@@ -66,12 +66,19 @@ function Overview() {
 
   const getFilteredProducts = () => {
     if (!searchQuery.trim()) return products;
-    const searchTags = searchQuery.toLowerCase().split(/[\s,]+/).filter(t => t.length > 0);
-    
+    const searchTerms = searchQuery.toLowerCase().split(/[\s,]+/).filter(t => t.length > 0);
+
     return products.filter(product => {
       const productTags = (product.tags || []).map(t => t.toLowerCase());
-      return searchTags.every(st => 
-        productTags.some(pt => pt.includes(st))
+      const buyer = (product.buyer || '').toLowerCase();
+      const description = (product.description || '').toLowerCase();
+      const name = (product.name || '').toLowerCase();
+
+      return searchTerms.every(term =>
+        productTags.some(tag => tag.includes(term)) ||
+        buyer.includes(term) ||
+        description.includes(term) ||
+        name.includes(term)
       );
     });
   };
@@ -85,7 +92,7 @@ function Overview() {
           <h1 style={{ fontSize: '2rem', fontWeight: '700', marginBottom: '0.5rem' }}>Chào buổi chiều! 👋</h1>
           <p style={{ color: 'var(--text-muted)' }}>Đây là tình hình kho bãi của bạn hôm nay.</p>
         </div>
-        
+
       </div>
 
       <div className="grid grid-4 summary-grid-mobile" style={{ marginBottom: '3rem' }}>
@@ -147,11 +154,11 @@ function Overview() {
               <div key={`low-${product.id}`} className="card" style={{ border: '1px solid #fee2e2', background: '#fffafb' }}>
                 <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
                   <div style={{ width: '100px', height: '100px', background: '#fef2f2', borderRadius: '12px', overflow: 'hidden', flexShrink: 0 }}>
-                    {product.image_url && <img 
-                      src={product.image_url} 
-                      alt="" 
+                    {product.image_url && <img
+                      src={product.image_url}
+                      alt=""
                       referrerPolicy="no-referrer"
-                      style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
+                      style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                     />}
                   </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
@@ -178,11 +185,11 @@ function Overview() {
               <div key={`ship-${s.id}`} className="card" style={{ border: '1px solid #ddd6fe', background: '#fcfaff' }}>
                 <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
                   <div style={{ width: '100px', height: '100px', background: '#f5f3ff', borderRadius: '12px', overflow: 'hidden', flexShrink: 0 }}>
-                    {s.image_url && <img 
-                      src={s.image_url} 
-                      alt="" 
+                    {s.image_url && <img
+                      src={s.image_url}
+                      alt=""
                       referrerPolicy="no-referrer"
-                      style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
+                      style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                     />}
                   </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
@@ -192,15 +199,15 @@ function Overview() {
                         const currentStatus = STATUS_LIST.find(st => st.id === s.status) || STATUS_LIST[0];
                         return (
                           <div style={{ position: 'relative', flex: 1 }}>
-                            <select 
-                              value={s.status} 
+                            <select
+                              value={s.status}
                               onChange={(e) => handleUpdateStatus(s.id, e.target.value)}
-                              style={{ 
+                              style={{
                                 appearance: 'none',
-                                fontSize: '0.7rem', 
-                                padding: '4px 12px', 
+                                fontSize: '0.7rem',
+                                padding: '4px 12px',
                                 paddingRight: '20px',
-                                borderRadius: '20px', 
+                                borderRadius: '20px',
                                 border: `1px solid ${currentStatus.color}40`,
                                 background: currentStatus.bg,
                                 color: currentStatus.color,
@@ -237,24 +244,24 @@ function Overview() {
           <h2 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '10px' }}>
             <Box size={24} color="var(--primary)" /> Kho nguyên vật liệu {searchQuery && <span style={{ fontSize: '1rem', fontWeight: 'normal', color: 'var(--text-muted)' }}>— Kết quả tìm kiếm ({filtered.length})</span>}
           </h2>
-          
+
           <div className="search-box card" style={{ padding: '0.25rem 1rem', display: 'flex', alignItems: 'center', gap: '10px', maxWidth: '300px', width: '100%', margin: 0 }}>
             <Search size={20} color="var(--text-muted)" />
-            <input 
-              type="text" 
-              placeholder="Tìm theo tag..." 
+            <input
+              type="text"
+              placeholder="Tìm theo tên, tag, người mua, mô tả..."
               style={{ border: 'none', background: 'transparent', padding: '0.5rem 0', width: '100%' }}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
             />
           </div>
         </div>
-        
+
         {loading ? (
           <div style={{ textAlign: 'center', padding: '4rem' }}>Đang tải dữ liệu...</div>
         ) : filtered.length === 0 ? (
           <div className="card" style={{ textAlign: 'center', padding: '4rem', color: 'var(--text-muted)' }}>
-             Không tìm thấy hàng hóa nào phù hợp.
+            Không tìm thấy hàng hóa nào phù hợp.
           </div>
         ) : (
           <div className="grid grid-3">
@@ -262,11 +269,11 @@ function Overview() {
               <div key={product.id} className="card fade-in" style={{ padding: '0', overflow: 'hidden', position: 'relative' }}>
                 <div style={{ height: '220px', background: '#f1f5f9', position: 'relative', overflow: 'hidden' }}>
                   {product.image_url ? (
-                    <img 
-                      src={product.image_url} 
-                      alt={product.name} 
+                    <img
+                      src={product.image_url}
+                      alt={product.name}
                       referrerPolicy="no-referrer"
-                      style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
+                      style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                     />
                   ) : (
                     <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: '#cbd5e1' }}>
@@ -276,11 +283,11 @@ function Overview() {
                   )}
                   {product.is_low_stock && (
                     <div style={{ position: 'absolute', top: '10px', right: '10px' }}>
-                      <span className="badge badge-warning">Sắp hết hàng</span>
+                      <span className="badge badge-warning">Sắp hết</span>
                     </div>
                   )}
                 </div>
-                
+
                 <div style={{ padding: '1.25rem' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px' }}>
                     <h3 style={{ fontSize: '1.125rem', fontWeight: '600' }}>{product.name}</h3>
@@ -288,7 +295,7 @@ function Overview() {
                       <span style={{ fontSize: '1.25rem' }}>{product.quantity}</span>
                     </div>
                   </div>
-                  
+
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '1rem' }}>
                     {(product.tags || []).map(tag => (
                       <span key={tag} className="badge badge-info" style={{ fontSize: '0.65rem' }}>{tag}</span>
