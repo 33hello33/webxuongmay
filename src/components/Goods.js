@@ -244,15 +244,14 @@ function Goods() {
   const getFilteredProducts = () => {
     if (!searchQuery.trim()) return products;
     const searchTags = searchQuery.toLowerCase().split(/[\s,]+/).filter(t => t.length > 0);
-    return products
-      .map(product => {
-        const matches = (product.tags || []).filter(tag =>
-          searchTags.some(st => tag.toLowerCase().includes(st))
-        );
-        return { ...product, matchCount: matches.length };
-      })
-      .filter(p => p.matchCount > 0)
-      .sort((a, b) => b.matchCount - a.matchCount);
+    
+    return products.filter(product => {
+      const productTags = (product.tags || []).map(t => t.toLowerCase());
+      // Every search tag must be found (as a substring or exact) in at least one product tag
+      return searchTags.every(st => 
+        productTags.some(pt => pt.includes(st))
+      );
+    });
   };
 
   const filtered = getFilteredProducts();
