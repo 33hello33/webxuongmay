@@ -267,7 +267,7 @@ function Goods() {
                       <div style={{ width: '150px', height: '150px', background: '#f1f5f9', borderRadius: '16px', overflow: 'hidden', flexShrink: 0 }}>
                         {p.image_url && (
                           <img 
-                            src={p.image_url.includes('drive.google.com') ? `https://drive.google.com/thumbnail?id=${p.image_url.match(/[-\w]{25,}/)}&sz=w600` : p.image_url} 
+                            src={p.image_url} 
                             alt="" 
                             referrerPolicy="no-referrer"
                             style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
@@ -326,7 +326,7 @@ function Goods() {
                 <div style={{ display: 'flex', gap: '12px' }}>
                   <div style={{ width: '150px', height: '150px', background: '#f1f5f9', borderRadius: '16px', overflow: 'hidden', flexShrink: 0 }}>
                     {p.image_url && <img 
-                      src={p.image_url.replace('drive.google.com/uc?id=', 'lh3.googleusercontent.com/d/').split('&')[0]} 
+                      src={p.image_url} 
                       alt="" 
                       referrerPolicy="no-referrer"
                       style={{ width: '100%', height: '100%', objectFit: 'cover' }} 

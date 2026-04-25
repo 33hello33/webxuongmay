@@ -152,7 +152,7 @@ function Overview() {
                 <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
                   <div style={{ width: '100px', height: '100px', background: '#fef2f2', borderRadius: '12px', overflow: 'hidden', flexShrink: 0 }}>
                     {product.image_url && <img 
-                      src={product.image_url.includes('drive.google.com') ? `https://drive.google.com/thumbnail?id=${product.image_url.match(/[-\w]{25,}/)}&sz=w600` : product.image_url} 
+                      src={product.image_url} 
                       alt="" 
                       referrerPolicy="no-referrer"
                       style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
@@ -183,7 +183,7 @@ function Overview() {
                 <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
                   <div style={{ width: '100px', height: '100px', background: '#f5f3ff', borderRadius: '12px', overflow: 'hidden', flexShrink: 0 }}>
                     {s.image_url && <img 
-                      src={s.image_url.includes('drive.google.com') ? `https://drive.google.com/thumbnail?id=${s.image_url.match(/[-\w]{25,}/)}&sz=w600` : s.image_url} 
+                      src={s.image_url} 
                       alt="" 
                       referrerPolicy="no-referrer"
                       style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
@@ -267,7 +267,7 @@ function Overview() {
                 <div style={{ height: '220px', background: '#f1f5f9', position: 'relative', overflow: 'hidden' }}>
                   {product.image_url ? (
                     <img 
-                      src={product.image_url.includes('drive.google.com') ? `https://drive.google.com/thumbnail?id=${product.image_url.match(/[-\w]{25,}/)}&sz=w600` : product.image_url} 
+                      src={product.image_url} 
                       alt={product.name} 
                       referrerPolicy="no-referrer"
                       style={{ width: '100%', height: '100%', objectFit: 'cover' }} 

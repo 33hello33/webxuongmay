@@ -185,7 +185,7 @@ function Shipping() {
                       <div style={{ width: '150px', height: '150px', background: '#f1f5f9', borderRadius: '16px', overflow: 'hidden', flexShrink: 0 }}>
                         {s.image_url && (
                           <img 
-                            src={s.image_url.includes('drive.google.com') ? `https://drive.google.com/thumbnail?id=${s.image_url.match(/[-\w]{25,}/)}&sz=w600` : s.image_url} 
+                            src={s.image_url} 
                             alt="" 
                             referrerPolicy="no-referrer"
                             style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
