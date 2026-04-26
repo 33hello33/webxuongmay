@@ -5,7 +5,8 @@ import Goods from './components/Goods';
 import Customers from './components/Customers';
 import Shipping from './components/Shipping';
 import Config from './components/Config';
-import { LayoutDashboard, Box, Users, Bell, Truck, Settings } from 'lucide-react';
+import Expenses from './components/Expenses';
+import { LayoutDashboard, Box, Users, Bell, Truck, Settings, Wallet } from 'lucide-react';
 
 function App() {
   const [activeTab, setActiveTab] = useState('overview');
@@ -16,6 +17,7 @@ function App() {
       case 'goods': return <Goods />;
       case 'customers': return <Customers />;
       case 'shipping': return <Shipping />;
+      case 'expenses': return <Expenses />;
       case 'config': return <Config />;
       default: return <Overview />;
     }
@@ -64,6 +66,15 @@ function App() {
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <Truck size={18} />
               <span>Hàng gửi</span>
+            </div>
+          </button>
+          <button
+            className={`tab-btn ${activeTab === 'expenses' ? 'active' : ''}`}
+            onClick={() => setActiveTab('expenses')}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Wallet size={18} />
+              <span>Chi phí</span>
             </div>
           </button>
           <button
