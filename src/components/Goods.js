@@ -18,6 +18,7 @@ function Goods() {
   const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterDate, setFilterDate] = useState('');
+  const [filterBuyer, setFilterBuyer] = useState('');
 
   // Form states
   const [formData, setFormData] = useState({
@@ -249,19 +250,21 @@ function Goods() {
       result = result.filter(p => p.created_at && format(new Date(p.created_at), 'yyyy-MM-dd') === filterDate);
     }
 
+    if (filterBuyer) {
+      result = result.filter(p => p.buyer?.toLowerCase().trim() === filterBuyer);
+    }
+
     if (!searchQuery.trim()) return result;
     const searchTerms = searchQuery.toLowerCase().split(/[\s,]+/).filter(t => t.length > 0);
 
     return result.filter(product => {
       const productTags = (product.tags || []).map(t => t.toLowerCase());
-      const buyer = (product.buyer || '').toLowerCase();
       const description = (product.description || '').toLowerCase();
       const name = (product.name || '').toLowerCase();
       const dateStr = product.created_at ? format(new Date(product.created_at), 'dd/MM/yyyy') : '';
 
       return searchTerms.every(term =>
         productTags.some(tag => tag.includes(term)) ||
-        buyer.includes(term) ||
         description.includes(term) ||
         name.includes(term) ||
         dateStr.includes(term)
@@ -295,11 +298,24 @@ function Goods() {
             <Search size={20} color="var(--text-muted)" />
             <input
               type="text"
-              placeholder="Tìm theo tên, tag, người mua, mô tả, ngày..."
+              placeholder="Tìm theo tên, tag, mô tả, ngày..."
               style={{ border: 'none', background: 'transparent', padding: '0.5rem 0', width: '100%' }}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
             />
+          </div>
+          <div className="card" style={{ padding: '0.5rem 1rem', display: 'flex', alignItems: 'center', gap: '10px', margin: 0 }}>
+            <select
+              value={filterBuyer}
+              onChange={e => setFilterBuyer(e.target.value)}
+              style={{ border: 'none', background: 'transparent', color: 'var(--text-main)', outline: 'none', cursor: 'pointer' }}
+            >
+              <option value="">Tất cả người mua</option>
+              {[...new Set(products.map(p => p.buyer?.toLowerCase().trim()).filter(Boolean))].sort().map(buyer => (
+                <option key={buyer} value={buyer}>{buyer}</option>
+              ))}
+            </select>
+            {filterBuyer && <X size={16} onClick={() => setFilterBuyer('')} style={{ cursor: 'pointer', color: '#ef4444' }} />}
           </div>
           <div className="card" style={{ padding: '0.5rem 1rem', display: 'flex', alignItems: 'center', gap: '10px', margin: 0 }}>
             <Clock size={20} color="var(--text-muted)" />
