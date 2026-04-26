@@ -51,15 +51,6 @@ function App() {
             </div>
           </button>
           <button
-            className={`tab-btn ${activeTab === 'customers' ? 'active' : ''}`}
-            onClick={() => setActiveTab('customers')}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <Users size={18} />
-              <span>Khách hàng</span>
-            </div>
-          </button>
-          <button
             className={`tab-btn ${activeTab === 'shipping' ? 'active' : ''}`}
             onClick={() => setActiveTab('shipping')}
           >
@@ -78,12 +69,12 @@ function App() {
             </div>
           </button>
           <button
-            className={`tab-btn ${activeTab === 'config' ? 'active' : ''}`}
-            onClick={() => setActiveTab('config')}
+            className={`tab-btn ${activeTab === 'customers' ? 'active' : ''}`}
+            onClick={() => setActiveTab('customers')}
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <Settings size={18} />
-              <span>Cấu hình</span>
+              <Users size={18} />
+              <span>Khách hàng</span>
             </div>
           </button>
         </nav>

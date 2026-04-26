@@ -87,14 +87,6 @@ function Overview() {
 
   return (
     <div className="fade-in">
-      <div className="overview-header-mobile" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '2rem' }}>
-        <div>
-          <h1 style={{ fontSize: '2rem', fontWeight: '700', marginBottom: '0.5rem' }}>Chào buổi chiều! 👋</h1>
-          <p style={{ color: 'var(--text-muted)' }}>Đây là tình hình kho bãi của bạn hôm nay.</p>
-        </div>
-
-      </div>
-
       <div className="grid grid-4 summary-grid-mobile" style={{ marginBottom: '3rem' }}>
         <div className="card summary-card-mobile" style={{ borderLeft: '4px solid #ef4444' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '1rem' }}>
