@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import './index.css';
 import Overview from './components/Overview';
 import Goods from './components/Goods';
@@ -6,10 +6,33 @@ import Customers from './components/Customers';
 import Shipping from './components/Shipping';
 import Config from './components/Config';
 import Expenses from './components/Expenses';
-import { LayoutDashboard, Box, Users, Bell, Truck, Settings, Wallet } from 'lucide-react';
+import DefectiveGoods from './components/DefectiveGoods';
+import { LayoutDashboard, Box, Users, Bell, Truck, Settings, Wallet, X, AlertCircle } from 'lucide-react';
 
 function App() {
   const [activeTab, setActiveTab] = useState('overview');
+  const [previewImage, setPreviewImage] = useState(null);
+
+  useEffect(() => {
+    const handleGlobalClick = (e) => {
+      // Check if the clicked element is an image
+      if (e.target.tagName === 'IMG' && e.target.src && !e.target.closest('.image-viewer-container')) {
+        // Avoid clicking icons or small UI elements if they are images
+        // Most product images in this app have a specific source or are within cards
+        const isProductImage = e.target.closest('.card') || 
+                              e.target.closest('.modal-container') || 
+                              e.target.src.includes('supabase') || 
+                              e.target.src.includes('googleusercontent');
+        
+        if (isProductImage) {
+          setPreviewImage(e.target.src);
+        }
+      }
+    };
+
+    window.addEventListener('click', handleGlobalClick);
+    return () => window.removeEventListener('click', handleGlobalClick);
+  }, []);
 
   const renderContent = () => {
     switch (activeTab) {
@@ -17,6 +40,7 @@ function App() {
       case 'goods': return <Goods />;
       case 'customers': return <Customers />;
       case 'shipping': return <Shipping />;
+      case 'defective': return <DefectiveGoods />;
       case 'expenses': return <Expenses />;
       case 'config': return <Config />;
       default: return <Overview />;
@@ -60,6 +84,15 @@ function App() {
             </div>
           </button>
           <button
+            className={`tab-btn ${activeTab === 'defective' ? 'active' : ''}`}
+            onClick={() => setActiveTab('defective')}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <AlertCircle size={18} />
+              <span>Hàng lỗi</span>
+            </div>
+          </button>
+          <button
             className={`tab-btn ${activeTab === 'expenses' ? 'active' : ''}`}
             onClick={() => setActiveTab('expenses')}
           >
@@ -89,6 +122,21 @@ function App() {
       <main className="content-area">
         {renderContent()}
       </main>
+
+      {/* Global Image Viewer Modal */}
+      {previewImage && (
+        <div 
+          className="image-viewer-overlay" 
+          onClick={() => setPreviewImage(null)}
+        >
+          <div className="image-viewer-container" onClick={e => e.stopPropagation()}>
+            <button className="image-viewer-close" onClick={() => setPreviewImage(null)}>
+              <X size={32} />
+            </button>
+            <img src={previewImage} alt="Full view" />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

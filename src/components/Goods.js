@@ -293,8 +293,8 @@ function Goods() {
       </div>
 
       {view === 'list' && (
-        <div style={{ display: 'flex', gap: '15px', marginBottom: '1.5rem', flexWrap: 'wrap' }}>
-          <div className="search-box card" style={{ padding: '0.5rem 1rem', display: 'flex', alignItems: 'center', gap: '10px', flex: 1, minWidth: '300px', margin: 0 }}>
+        <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginBottom: '1.5rem' }}>
+          <div className="search-box card" style={{ flex: '1 1 350px', maxWidth: '500px', padding: '0.5rem 1rem', display: 'flex', alignItems: 'center', gap: '10px', margin: 0 }}>
             <Search size={20} color="var(--text-muted)" />
             <input
               type="text"
@@ -303,29 +303,33 @@ function Goods() {
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
             />
+            {searchQuery && <X size={16} onClick={() => setSearchQuery('')} style={{ cursor: 'pointer', color: 'var(--text-muted)' }} />}
           </div>
-          <div className="card" style={{ padding: '0.5rem 1rem', display: 'flex', alignItems: 'center', gap: '10px', margin: 0 }}>
-            <select
-              value={filterBuyer}
-              onChange={e => setFilterBuyer(e.target.value)}
-              style={{ border: 'none', background: 'transparent', color: 'var(--text-main)', outline: 'none', cursor: 'pointer' }}
-            >
-              <option value="">Tất cả người mua</option>
-              {[...new Set(products.map(p => p.buyer?.toLowerCase().trim()).filter(Boolean))].sort().map(buyer => (
-                <option key={buyer} value={buyer}>{buyer}</option>
-              ))}
-            </select>
-            {filterBuyer && <X size={16} onClick={() => setFilterBuyer('')} style={{ cursor: 'pointer', color: '#ef4444' }} />}
-          </div>
-          <div className="card" style={{ padding: '0.5rem 1rem', display: 'flex', alignItems: 'center', gap: '10px', margin: 0 }}>
-            <Clock size={20} color="var(--text-muted)" />
-            <input
-              type="date"
-              value={filterDate}
-              onChange={e => setFilterDate(e.target.value)}
-              style={{ border: 'none', background: 'transparent', color: 'var(--text-main)', outline: 'none' }}
-            />
-            {filterDate && <X size={16} onClick={() => setFilterDate('')} style={{ cursor: 'pointer', color: '#ef4444' }} />}
+          
+          <div style={{ display: 'flex', gap: '10px', flex: '1 1 300px', maxWidth: '450px' }}>
+            <div className="card" style={{ padding: '0.5rem 1rem', display: 'flex', alignItems: 'center', gap: '10px', flex: 1, margin: 0, height: '45px' }}>
+              <select
+                value={filterBuyer}
+                onChange={e => setFilterBuyer(e.target.value)}
+                style={{ border: 'none', background: 'transparent', color: 'var(--text-main)', outline: 'none', cursor: 'pointer', width: '100%', padding: 0 }}
+              >
+                <option value="">Người mua</option>
+                {[...new Set(products.map(p => p.buyer?.toLowerCase().trim()).filter(Boolean))].sort().map(buyer => (
+                  <option key={buyer} value={buyer}>{buyer}</option>
+                ))}
+              </select>
+              {filterBuyer && <X size={16} onClick={() => setFilterBuyer('')} style={{ cursor: 'pointer', color: '#ef4444' }} />}
+            </div>
+            
+            <div className="card" style={{ padding: '0.5rem 1rem', display: 'flex', alignItems: 'center', gap: '10px', flex: 1, margin: 0, height: '45px' }}>
+              <input
+                type="date"
+                value={filterDate}
+                onChange={e => setFilterDate(e.target.value)}
+                style={{ border: 'none', background: 'transparent', color: 'var(--text-main)', outline: 'none', width: '100%', padding: 0 }}
+              />
+              {filterDate && <X size={16} onClick={() => setFilterDate('')} style={{ cursor: 'pointer', color: '#ef4444' }} />}
+            </div>
           </div>
         </div>
       )}
@@ -525,46 +529,18 @@ function Goods() {
 
             <form onSubmit={['add_product', 'edit_product'].includes(showModal) ? handleSaveProduct : handleTransaction}>
               {['add_product', 'edit_product'].includes(showModal) ? (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                  <div><label style={{ display: 'block', marginBottom: '4px', fontSize: '0.875rem', fontWeight: '500' }}>Tên hàng hóa</label><input required value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} /></div>
-                  <div><label style={{ display: 'block', marginBottom: '4px', fontSize: '0.875rem', fontWeight: '500' }}>Mô tả</label><textarea value={formData.description} onChange={e => setFormData({ ...formData, description: e.target.value })} /></div>
-                  <div style={{ display: 'flex', gap: '1rem', alignItems: 'flex-end', justifyContent: 'space-between' }}>
-                    <div style={{ flex: 1 }}>
-                      <label style={{ display: 'block', marginBottom: '4px', fontSize: '0.875rem', fontWeight: '500' }}>
-                        {showModal === 'add_product' ? 'Tồn ban đầu' : 'Số lượng hiện tại'}
-                      </label>
-                      <input
-                        type="text"
-                        placeholder="VD: 10 cuộn, 5kg..."
-                        value={formData.quantity}
-                        onChange={e => setFormData({ ...formData, quantity: e.target.value })}
-                      />
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', paddingBottom: '12px', flexShrink: 0 }}>
-                      <input
-                        type="checkbox"
-                        id="is_low_stock"
-                        style={{ width: '18px', height: '18px', cursor: 'pointer', margin: 0 }}
-                        checked={formData.is_low_stock}
-                        onChange={e => setFormData({ ...formData, is_low_stock: e.target.checked })}
-                      />
-                      <label htmlFor="is_low_stock" style={{ fontSize: '0.875rem', fontWeight: '500', cursor: 'pointer', whiteSpace: 'nowrap' }}>
-                        Sắp hết
-                      </label>
-                    </div>
-                  </div>
-                  <div><label style={{ display: 'block', marginBottom: '4px', fontSize: '0.875rem', fontWeight: '500' }}>Người mua (Text)</label><input value={formData.buyer} onChange={e => setFormData({ ...formData, buyer: e.target.value })} /></div>
-                  <div><label style={{ display: 'block', marginBottom: '4px', fontSize: '0.875rem', fontWeight: '500' }}>Tags (cách nhau bởi dấu phẩy)</label><input placeholder="Vải, Cotton, Mùa hè..." value={formData.tags} onChange={e => setFormData({ ...formData, tags: e.target.value })} /></div>
-                  <div>
-                    <label style={{ display: 'block', marginBottom: '4px', fontSize: '0.875rem', fontWeight: '500' }}>Hình ảnh sản phẩm</label>
-                    <div style={{ display: 'flex', gap: '1rem', alignItems: 'flex-start' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'minmax(120px, 1fr) 2.5fr', gap: '1.5rem' }}>
+                    {/* Left: Image */}
+                    <div>
+                      <label>Ảnh sản phẩm</label>
                       <div
                         onClick={() => document.getElementById('image-upload').click()}
                         style={{
-                          width: '100px',
-                          height: '100px',
+                          width: '100%',
+                          aspectRatio: '1/1',
                           border: '2px dashed var(--border)',
-                          borderRadius: '8px',
+                          borderRadius: '12px',
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'center',
@@ -581,38 +557,70 @@ function Goods() {
                             style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                           />
                         ) : (
-                          <Plus size={24} color="var(--text-muted)" />
+                          <div style={{ textAlign: 'center' }}>
+                            <Plus size={24} color="var(--text-muted)" />
+                            <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Chọn ảnh</div>
+                          </div>
                         )}
                       </div>
-                      <div style={{ flex: 1 }}>
+                      <input
+                        id="image-upload"
+                        type="file"
+                        accept="image/*"
+                        onChange={handleFileChange}
+                        style={{ display: 'none' }}
+                      />
+                    </div>
+
+                    {/* Right: Main Info */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                      <div>
+                        <label>Tên hàng hóa</label>
+                        <input required value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} />
+                      </div>
+                      
+                      <div>
+                        <label>{showModal === 'add_product' ? 'Tồn ban đầu' : 'Số lượng hiện tại'}</label>
                         <input
-                          id="image-upload"
-                          type="file"
-                          accept="image/*"
-                          onChange={handleFileChange}
-                          style={{ display: 'none' }}
+                          type="text"
+                          placeholder="VD: 10 cuộn..."
+                          value={formData.quantity}
+                          onChange={e => setFormData({ ...formData, quantity: e.target.value })}
                         />
-                        <button
-                          type="button"
-                          className="btn"
-                          onClick={() => document.getElementById('image-upload').click()}
-                          style={{ fontSize: '0.875rem', marginBottom: '8px', width: '100%', background: '#fff', border: '1px solid var(--border)' }}
-                        >
-                          Chọn ảnh từ máy tính
-                        </button>
-                        {imagePreview && (
-                          <button
-                            type="button"
-                            className="btn"
-                            onClick={() => { setImageFile(null); setImagePreview(null); }}
-                            style={{ fontSize: '0.875rem', width: '100%', background: '#fff1f2', color: '#e11d48' }}
-                          >
-                            Xóa ảnh
-                          </button>
-                        )}
-                        {!imagePreview && <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Hỗ trợ JPG, PNG, WEBP. Hệ thống sẽ tự động nén ảnh xuống dưới 100KB.</div>}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '6px' }}>
+                          <input
+                            type="checkbox"
+                            id="is_low_stock"
+                            style={{ width: '16px', height: '16px', cursor: 'pointer', margin: 0 }}
+                            checked={formData.is_low_stock}
+                            onChange={e => setFormData({ ...formData, is_low_stock: e.target.checked })}
+                          />
+                          <label htmlFor="is_low_stock" style={{ margin: 0, fontSize: '0.8125rem', fontWeight: '500', cursor: 'pointer' }}>
+                            Đánh dấu là sắp hết hàng
+                          </label>
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <label style={{ margin: 0, whiteSpace: 'nowrap', flexShrink: 0 }}>Người mua:</label>
+                        <input 
+                          placeholder="Người mua / Nguồn hàng..." 
+                          value={formData.buyer} 
+                          onChange={e => setFormData({ ...formData, buyer: e.target.value })} 
+                          style={{ padding: '4px 8px' }}
+                        />
                       </div>
                     </div>
+                  </div>
+
+                  <div>
+                    <label>Tags (cách nhau bởi dấu phẩy)</label>
+                    <input placeholder="Vải, Cotton, Mùa hè..." value={formData.tags} onChange={e => setFormData({ ...formData, tags: e.target.value })} />
+                  </div>
+
+                  <div>
+                    <label>Mô tả chi tiết</label>
+                    <textarea value={formData.description} rows="2" onChange={e => setFormData({ ...formData, description: e.target.value })} style={{ height: '60px' }} />
                   </div>
                 </div>
               ) : (

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabase';
-import { Plus, X, Truck, Clock, CheckCircle, Package, AlertCircle, Camera } from 'lucide-react';
+import { Plus, X, Truck, Clock, CheckCircle, Package, AlertCircle, Camera, Search, Trash2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { vi } from 'date-fns/locale';
 import { createPortal } from 'react-dom';
@@ -22,6 +22,9 @@ function Shipping() {
   const [customers, setCustomers] = useState([]);
   const [loading, setLoading] = useState(false);
   const [showModal, setShowModal] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filterDate, setFilterDate] = useState('');
+  const [filterBuyer, setFilterBuyer] = useState('');
   
   // Form state
   const [formData, setFormData] = useState({
@@ -32,6 +35,7 @@ function Shipping() {
     image_url: ''
   });
   const [materialRows, setMaterialRows] = useState([{ product_id: '', qty: '' }]);
+  const [materialSearch, setMaterialSearch] = useState('');
   const [imageFile, setImageFile] = useState(null);
   const [imagePreview, setImagePreview] = useState(null);
 
@@ -142,12 +146,53 @@ function Shipping() {
     }
   };
 
+  const handleDelete = async (id) => {
+    if (window.confirm('Bạn có chắc chắn muốn xóa vận đơn này?')) {
+      const { error } = await supabase.from('transactions').delete().eq('id', id);
+      if (!error) fetchShippings();
+    }
+  };
+
   const resetForm = () => {
     setFormData({ product_name: '', quantity: '', buyer_id: '', notes: '', image_url: '' });
     setMaterialRows([{ product_id: '', qty: '' }]);
+    setMaterialSearch('');
     setImageFile(null);
     setImagePreview(null);
   };
+
+  const filteredShippings = shippings.filter(s => {
+    // 1. Filter by literal date
+    if (filterDate) {
+      if (format(new Date(s.date), 'yyyy-MM-dd') !== filterDate) return false;
+    }
+
+    // 2. Filter by Buyer (Customer)
+    if (filterBuyer) {
+      if (s.buyer_id?.toString() !== filterBuyer) return false;
+    }
+
+    // 3. Robust Search Query
+    if (!searchQuery.trim()) return true;
+    const searchTerms = searchQuery.toLowerCase().split(/[\s,]+/).filter(t => t.length > 0);
+    
+    const customerName = (s.customers?.name || '').toLowerCase();
+    const productName = (s.product_name || '').toLowerCase();
+    const notes = (s.notes || '').toLowerCase();
+    const materialNames = (s.materials || []).map(m => m.product_name.toLowerCase());
+    const materialTags = (s.materials || []).flatMap(m => {
+      const prod = products.find(p => p.id.toString() === m.product_id.toString());
+      return prod ? (prod.tags || []) : [];
+    }).map(t => t.toLowerCase());
+
+    return searchTerms.every(term => 
+      customerName.includes(term) ||
+      productName.includes(term) ||
+      notes.includes(term) ||
+      materialNames.some(mn => mn.includes(term)) ||
+      materialTags.some(mt => mt.includes(term))
+    );
+  });
 
   return (
     <div className="fade-in">
@@ -161,7 +206,47 @@ function Shipping() {
         </button>
       </div>
 
-      <div className="card" style={{ padding: '0', overflowX: 'auto' }}>
+      <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginBottom: '1.5rem' }}>
+        <div className="search-box card" style={{ flex: '1 1 350px', maxWidth: '500px', padding: '0.5rem 1rem', display: 'flex', alignItems: 'center', gap: '10px', margin: 0 }}>
+          <Search size={20} color="var(--text-muted)" />
+          <input
+            type="text"
+            placeholder="Tìm theo khách, sản phẩm, vật liệu, tag..."
+            style={{ border: 'none', background: 'transparent', padding: '0.5rem 0', width: '100%', outline: 'none' }}
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+          />
+          {searchQuery && <X size={16} onClick={() => setSearchQuery('')} style={{ cursor: 'pointer', color: 'var(--text-muted)' }} />}
+        </div>
+        
+        <div style={{ display: 'flex', gap: '10px', flex: '1 1 300px', maxWidth: '450px' }}>
+          <div className="card" style={{ padding: '0.5rem 1rem', display: 'flex', alignItems: 'center', gap: '10px', flex: 1, margin: 0, height: '45px' }}>
+            <select
+              value={filterBuyer}
+              onChange={e => setFilterBuyer(e.target.value)}
+              style={{ border: 'none', background: 'transparent', color: 'var(--text-main)', outline: 'none', cursor: 'pointer', width: '100%', padding: 0 }}
+            >
+              <option value="">Khách hàng</option>
+              {customers.map(c => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
+            {filterBuyer && <X size={16} onClick={() => setFilterBuyer('')} style={{ cursor: 'pointer', color: '#ef4444' }} />}
+          </div>
+          
+          <div className="card" style={{ padding: '0.5rem 1rem', display: 'flex', alignItems: 'center', gap: '10px', flex: 1, margin: 0, height: '45px' }}>
+            <input
+              type="date"
+              value={filterDate}
+              onChange={e => setFilterDate(e.target.value)}
+              style={{ border: 'none', background: 'transparent', color: 'var(--text-main)', outline: 'none', width: '100%', padding: 0 }}
+            />
+            {filterDate && <X size={16} onClick={() => setFilterDate('')} style={{ cursor: 'pointer', color: '#ef4444' }} />}
+          </div>
+        </div>
+      </div>
+
+      <div className="desktop-only card" style={{ padding: '0', overflowX: 'auto' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead style={{ background: '#f8fafc', borderBottom: '1px solid var(--border)' }}>
             <tr>
@@ -175,14 +260,14 @@ function Shipping() {
             </tr>
           </thead>
           <tbody>
-            {shippings.map(s => {
+            {filteredShippings.map(s => {
               const currentStatus = STATUS_LIST.find(status => status.id === s.status) || STATUS_LIST[0];
               return (
                 <tr key={s.id} style={{ borderBottom: '1px solid var(--border)' }}>
                   <td style={{ padding: '1rem', fontSize: '0.875rem', fontWeight: '700', color: 'var(--primary)' }}>#{s.id}</td>
                   <td style={{ padding: '1rem' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                      <div style={{ width: '150px', height: '150px', background: '#f1f5f9', borderRadius: '16px', overflow: 'hidden', flexShrink: 0 }}>
+                      <div style={{ width: '100px', height: '100px', background: '#f1f5f9', borderRadius: '12px', overflow: 'hidden', flexShrink: 0 }}>
                         {s.image_url && (
                           <img 
                             src={s.image_url} 
@@ -218,27 +303,121 @@ function Shipping() {
                     </span>
                   </td>
                   <td style={{ padding: '1rem', textAlign: 'right' }}>
-                    <select 
-                      value={s.status} 
-                      onChange={(e) => handleUpdateStatus(s.id, e.target.value)}
-                      style={{ padding: '4px 8px', fontSize: '0.875rem', borderRadius: '6px', border: '1px solid var(--border)' }}
-                    >
-                      {STATUS_LIST.map(st => (
-                        <option key={st.id} value={st.id}>{st.label}</option>
-                      ))}
-                    </select>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', alignItems: 'flex-end' }}>
+                      <select 
+                        value={s.status} 
+                        onChange={(e) => handleUpdateStatus(s.id, e.target.value)}
+                        style={{ padding: '4px 8px', fontSize: '0.875rem', borderRadius: '6px', border: '1px solid var(--border)' }}
+                      >
+                        {STATUS_LIST.map(st => (
+                          <option key={st.id} value={st.id}>{st.label}</option>
+                        ))}
+                      </select>
+                      <button 
+                        onClick={() => handleDelete(s.id)}
+                        className="btn"
+                        style={{ padding: '4px 8px', background: '#fff1f2', color: '#e11d48', border: '1px solid #fee2e2', fontSize: '0.75rem' }}
+                      >
+                        <Trash2 size={14} /> Xóa
+                      </button>
+                    </div>
                   </td>
                 </tr>
               );
             })}
           </tbody>
         </table>
-        {shippings.length === 0 && (
-          <div style={{ textAlign: 'center', padding: '4rem', color: 'var(--text-muted)' }}>
-            Chưa có vận đơn nào.
-          </div>
-        )}
       </div>
+
+      <div className="mobile-only" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+        {filteredShippings.map(s => {
+          const currentStatus = STATUS_LIST.find(status => status.id === s.status) || STATUS_LIST[0];
+          return (
+            <div key={s.id} className="card" style={{ padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+              <div style={{ display: 'flex', gap: '1rem', alignItems: 'flex-start' }}>
+                <div style={{ width: '70px', height: '70px', background: '#f1f5f9', borderRadius: '10px', overflow: 'hidden', flexShrink: 0 }}>
+                  {s.image_url && (
+                    <img 
+                      src={s.image_url} 
+                      alt="" 
+                      referrerPolicy="no-referrer"
+                      style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
+                    />
+                  )}
+                </div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                    <div style={{ fontWeight: '700', fontSize: '1rem', color: 'var(--text-main)' }}>{s.product_name || 'Hàng không tên'}</div>
+                    <span style={{ fontSize: '0.75rem', fontWeight: '700', color: 'var(--primary)' }}>#{s.id}</span>
+                  </div>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '2px' }}>
+                    {format(new Date(s.date), 'dd/MM/yyyy HH:mm', { locale: vi })}
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', background: '#f8fafc', padding: '10px', borderRadius: '8px' }}>
+                <div>
+                  <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Số lượng</div>
+                  <div style={{ fontWeight: '700', fontSize: '1.125rem' }}>{s.quantity}</div>
+                </div>
+                <div>
+                  <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Khách hàng</div>
+                  <div style={{ fontWeight: '600' }}>{s.customers?.name || '—'}</div>
+                </div>
+              </div>
+
+              {s.materials?.length > 0 && (
+                <div>
+                  <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)', marginBottom: '6px', textTransform: 'uppercase' }}>Nguyên liệu sử dụng:</div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                    {s.materials.map((m, idx) => (
+                      <span key={idx} style={{ background: '#fff', border: '1px solid var(--border)', padding: '2px 8px', borderRadius: '4px', fontSize: '0.75rem' }}>
+                        {m.product_name}: <span style={{ fontWeight: 600 }}>{m.quantity}</span>
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {s.notes && (
+                <div style={{ background: '#fffbeb', padding: '8px', borderRadius: '6px', fontSize: '0.8125rem', border: '1px solid #fef3c7' }}>
+                  <span style={{ fontWeight: 600, color: '#92400e' }}>Ghi chú:</span> {s.notes}
+                </div>
+              )}
+
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '0.75rem', borderTop: '1px solid #f1f5f9' }}>
+                <span className="badge" style={{ background: currentStatus.bg, color: currentStatus.color, border: `1px solid ${currentStatus.color}40`, margin: 0 }}>
+                  {currentStatus.label}
+                </span>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <select 
+                    style={{ fontSize: '0.8125rem', padding: '4px 8px', borderRadius: '6px', border: '1px solid var(--border)', background: 'white' }}
+                    value={s.status} 
+                    onChange={(e) => handleUpdateStatus(s.id, e.target.value)}
+                  >
+                    {STATUS_LIST.map(st => (
+                      <option key={st.id} value={st.id}>{st.label}</option>
+                    ))}
+                  </select>
+                  <button 
+                    onClick={() => handleDelete(s.id)}
+                    style={{ background: '#fff1f2', border: '1px solid #fee2e2', color: '#e11d48', padding: '4px 10px', borderRadius: '6px' }}
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {filteredShippings.length === 0 && (
+        <div className="card" style={{ textAlign: 'center', padding: '4rem', color: 'var(--text-muted)' }}>
+          {searchQuery ? 'Không tìm thấy vận đơn nào phù hợp với tag này.' : 'Chưa có vận đơn nào.'}
+        </div>
+      )}
 
       {showModal && createPortal(
         <div className="modal-overlay">
@@ -249,106 +428,136 @@ function Shipping() {
             <h2 style={{ marginBottom: '1.5rem' }}>Tạo đơn gửi sản phẩm hoàn chỉnh</h2>
             
             <form onSubmit={handleAddShipping}>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-                {/* 1. Hình ảnh lên đầu tiên */}
-                <div>
-                  <label style={{ display: 'block', marginBottom: '8px', fontSize: '0.875rem', fontWeight: '600' }}>Ảnh sản phẩm hoàn chỉnh</label>
-                  <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
-                    <div
-                      onClick={() => document.getElementById('shipping-image').click()}
-                      style={{
-                        width: '120px', height: '120px', border: '2px dashed var(--border)', borderRadius: '12px',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', background: '#f8fafc', overflow: 'hidden'
-                      }}
-                    >
-                      {imagePreview ? (
-                        <img 
-                          src={imagePreview} 
-                          alt="" 
-                          referrerPolicy="no-referrer"
-                          style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
-                        />
-                      ) : (
-                        <Camera size={32} color="var(--text-muted)" />
-                      )}
-                    </div>
-                    <input id="shipping-image" type="file" accept="image/*" style={{ display: 'none' }} onChange={handleFileChange} />
-                    <div style={{ flex: 1 }}>
-                      <p style={{ fontSize: '0.875rem', fontWeight: '500', marginBottom: '4px' }}>Chụp ảnh sản phẩm đã hoàn thiện</p>
-                      <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Hệ thống sẽ tự động nén ảnh xuống dưới 100KB.</p>
-                    </div>
-                  </div>
-                </div>
-
-                {/* 2. Tên sản phẩm */}
-                <div>
-                  <label style={{ display: 'block', marginBottom: '4px', fontSize: '0.875rem', fontWeight: '600' }}>Tên sản phẩm gửi đi</label>
-                  <input required type="text" placeholder="Tên bộ quần áo, túi xách, đơn hàng..." value={formData.product_name} onChange={e => setFormData({ ...formData, product_name: e.target.value })} />
-                </div>
-
-                <div className="grid grid-2">
-                  {/* 3. Số lượng gửi */}
-                  <div>
-                    <label style={{ display: 'block', marginBottom: '4px', fontSize: '0.875rem', fontWeight: '600' }}>Số lượng sản phẩm</label>
-                    <input required type="text" placeholder="VD: 100 bộ..." value={formData.quantity} onChange={e => setFormData({ ...formData, quantity: e.target.value })} />
-                  </div>
-                  {/* 4. Khách hàng */}
-                  <div>
-                    <label style={{ display: 'block', marginBottom: '4px', fontSize: '0.875rem', fontWeight: '600' }}>Khách hàng (Người nhận)</label>
-                    <select required value={formData.buyer_id} onChange={e => setFormData({ ...formData, buyer_id: e.target.value })}>
-                      <option value="">Chọn khách hàng...</option>
-                      {customers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                    </select>
-                  </div>
-                </div>
-
-                {/* 5. Ghi chú */}
-                <div>
-                  <label style={{ display: 'block', marginBottom: '4px', fontSize: '0.875rem', fontWeight: '600' }}>Ghi chú vận đơn</label>
-                  <textarea rows="2" placeholder="Thông tin thêm về quy cách đóng gói, vận chuyển..." value={formData.notes} onChange={e => setFormData({ ...formData, notes: e.target.value })} />
-                </div>
-
-                {/* 6. Danh sách hàng hóa (nguyên liệu) */}
-                <div style={{ background: '#f8fafc', padding: '1rem', borderRadius: '12px', border: '1px solid var(--border)' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                    <label style={{ fontSize: '0.875rem', fontWeight: '700', color: 'var(--primary)' }}>Nguyên liệu sử dụng (Hàng hóa)</label>
-                    <button type="button" className="btn btn-primary" onClick={addMaterialRow} style={{ padding: '4px 12px', fontSize: '0.75rem' }}>
-                      <Plus size={14} style={{ marginRight: '4px' }} /> Thêm hàng hóa
-                    </button>
-                  </div>
-                  
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                    {materialRows.map((row, index) => (
-                      <div key={index} style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                        <select 
-                          style={{ flex: 2 }}
-                          value={row.product_id} 
-                          onChange={e => updateMaterialRow(index, 'product_id', e.target.value)}
-                        >
-                          <option value="">Chọn hàng hóa...</option>
-                          {products.map(p => <option key={p.id} value={p.id}>{p.name} (#{p.id})</option>)}
-                        </select>
-                        <input 
-                          style={{ flex: 1 }}
-                          type="text" 
-                          placeholder="SL/ĐV" 
-                          value={row.qty} 
-                          onChange={e => updateMaterialRow(index, 'qty', e.target.value)}
-                        />
-                        <button 
-                          type="button" 
-                          onClick={() => removeMaterialRow(index)}
-                          style={{ padding: '8px', color: '#ef4444', background: 'transparent', border: 'none', cursor: 'pointer' }}
-                        >
-                          <X size={18} />
-                        </button>
+              <div style={{ display: 'grid', gridTemplateColumns: '140px 1fr', gap: '1.5rem', marginBottom: '1rem' }}>
+                {/* Cột trái: Hình ảnh */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  <label>Ảnh sản phẩm</label>
+                  <div
+                    onClick={() => document.getElementById('shipping-image').click()}
+                    style={{
+                      width: '140px', height: '140px', border: '2px dashed var(--border)', borderRadius: '12px',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', background: '#f8fafc', overflow: 'hidden'
+                    }}
+                  >
+                    {imagePreview ? (
+                      <img 
+                        src={imagePreview} 
+                        alt="" 
+                        referrerPolicy="no-referrer"
+                        style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
+                      />
+                    ) : (
+                      <div style={{ textAlign: 'center' }}>
+                        <Camera size={24} color="var(--text-muted)" style={{ marginBottom: '4px' }} />
+                        <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>Chụp ảnh</div>
                       </div>
-                    ))}
+                    )}
+                  </div>
+                  <input id="shipping-image" type="file" accept="image/*" style={{ display: 'none' }} onChange={handleFileChange} />
+                  <p style={{ fontSize: '0.65rem', color: 'var(--text-muted)', textAlign: 'center' }}>Tự động nén về &lt; 100KB</p>
+                </div>
+
+                {/* Cột phải: Thông tin cơ bản */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                  <div>
+                    <label>Tên sản phẩm gửi đi</label>
+                    <input required type="text" placeholder="Tên bộ quần áo, đơn hàng..." value={formData.product_name} onChange={e => setFormData({ ...formData, product_name: e.target.value })} />
+                  </div>
+
+                  <div className="grid grid-2" style={{ gap: '10px' }}>
+                    <div>
+                      <label>Số lượng gửi</label>
+                      <input required type="text" placeholder="VD: 100 bộ..." value={formData.quantity} onChange={e => setFormData({ ...formData, quantity: e.target.value })} />
+                    </div>
+                    <div>
+                      <label>Khách hàng (Người nhận)</label>
+                      <select required value={formData.buyer_id} onChange={e => setFormData({ ...formData, buyer_id: e.target.value })}>
+                        <option value="">Chọn khách hàng...</option>
+                        {customers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                      </select>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label>Ghi chú vận đơn</label>
+                    <textarea rows="2" placeholder="Quy cách đóng gói, vận chuyển..." value={formData.notes} onChange={e => setFormData({ ...formData, notes: e.target.value })} style={{ height: '60px' }} />
                   </div>
                 </div>
               </div>
 
-              <div style={{ marginTop: '2.5rem', display: 'flex', gap: '10px' }}>
+              {/* Danh sách hàng hóa (nguyên liệu) */}
+              <div style={{ background: '#f8fafc', padding: '0.75rem 1rem', borderRadius: '12px', border: '1px solid var(--border)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+                  <label style={{ fontSize: '0.8125rem', fontWeight: '700', color: 'var(--primary)', margin: 0 }}>Nguyên liệu sử dụng (Hàng hóa)</label>
+                  <button type="button" className="btn btn-primary" onClick={addMaterialRow} style={{ padding: '2px 8px', fontSize: '0.7rem' }}>
+                    <Plus size={12} style={{ marginRight: '4px' }} /> Thêm hàng
+                  </button>
+                </div>
+
+                <div className="search-box" style={{ marginBottom: '0.75rem', background: 'white', border: '1px solid var(--border)', borderRadius: '8px', padding: '2px 10px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Search size={14} color="var(--text-muted)" />
+                  <input 
+                    type="text" 
+                    placeholder="Tìm nhanh hàng theo tag..." 
+                    value={materialSearch}
+                    onChange={e => setMaterialSearch(e.target.value)}
+                    style={{ border: 'none', background: 'transparent', padding: '4px 0', width: '100%', fontSize: '0.8125rem', outline: 'none' }}
+                  />
+                  {materialSearch && (
+                    <button type="button" onClick={() => setMaterialSearch('')} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', display: 'flex', alignItems: 'center' }}>
+                      <X size={12} />
+                    </button>
+                  )}
+                </div>
+                
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '150px', overflowY: 'auto', paddingRight: '4px' }}>
+                  {materialRows.map((row, index) => (
+                    <div key={index} style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                      <select 
+                        style={{ flex: 2, padding: '4px 8px' }}
+                        value={row.product_id} 
+                        onChange={e => updateMaterialRow(index, 'product_id', e.target.value)}
+                      >
+                        <option value="">Chọn hàng hóa...</option>
+                        {products
+                          .filter(p => {
+                            if (!materialSearch.trim()) return true;
+                            if (row.product_id?.toString() === p.id.toString()) return true;
+                            
+                            const searchTerms = materialSearch.toLowerCase().split(/[\s,]+/).filter(t => t.length > 0);
+                            const pTags = (p.tags || []).map(t => t.toLowerCase());
+                            
+                            return searchTerms.every(term => 
+                              pTags.some(tag => tag.includes(term))
+                            );
+                          })
+                          .map(p => (
+                            <option key={p.id} value={p.id}>
+                              {p.name} (#{p.id}) {p.tags?.length > 0 ? `[${p.tags.join(', ')}]` : ''}
+                            </option>
+                          ))
+                        }
+                      </select>
+                      <input 
+                        style={{ flex: 1, padding: '4px 8px' }}
+                        type="text" 
+                        placeholder="SL/ĐV" 
+                        value={row.qty} 
+                        onChange={e => updateMaterialRow(index, 'qty', e.target.value)}
+                      />
+                      <button 
+                        type="button" 
+                        onClick={() => removeMaterialRow(index)}
+                        style={{ padding: '4px', color: '#ef4444', background: 'transparent', border: 'none', cursor: 'pointer' }}
+                      >
+                        <X size={16} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div style={{ marginTop: '1.25rem', display: 'flex', gap: '10px' }}>
                 <button type="button" className="btn" style={{ flex: 1, background: '#f1f5f9' }} onClick={() => setShowModal(false)}>Hủy</button>
                 <button type="submit" className="btn btn-primary" style={{ flex: 2 }} disabled={loading}>{loading ? 'Đang xử lý...' : 'Xác nhận tạo vận đơn'}</button>
               </div>

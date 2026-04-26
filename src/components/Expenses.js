@@ -140,30 +140,32 @@ function Expenses() {
         </div>
       </div>
 
-      <div style={{ display: 'flex', gap: '15px', marginBottom: '1.5rem', flexWrap: 'wrap' }}>
-        <div className="search-box card" style={{ padding: '0.5rem 1rem', display: 'flex', alignItems: 'center', gap: '10px', flex: 1, minWidth: '300px', margin: 0 }}>
+      <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginBottom: '1.5rem' }}>
+        <div className="search-box card" style={{ flex: '1 1 350px', maxWidth: '500px', padding: '0.5rem 1rem', display: 'flex', alignItems: 'center', gap: '10px', margin: 0 }}>
           <Search size={20} color="var(--text-muted)" />
           <input
             type="text"
             placeholder="Tìm theo mục đích chi, người chi..."
-            style={{ border: 'none', background: 'transparent', padding: '0.5rem 0', width: '100%' }}
+            style={{ border: 'none', background: 'transparent', padding: '0.5rem 0', width: '100%', outline: 'none' }}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
           />
+          {searchQuery && <X size={16} onClick={() => setSearchQuery('')} style={{ cursor: 'pointer', color: 'var(--text-muted)' }} />}
         </div>
-        <div className="card" style={{ padding: '0.5rem 1rem', display: 'flex', alignItems: 'center', gap: '10px', margin: 0 }}>
+        
+        <div className="card" style={{ padding: '0.5rem 1rem', display: 'flex', alignItems: 'center', gap: '10px', flex: '0 1 200px', margin: 0 }}>
           <Calendar size={20} color="var(--text-muted)" />
           <input
             type="date"
             value={filterDate}
             onChange={e => setFilterDate(e.target.value)}
-            style={{ border: 'none', background: 'transparent', color: 'var(--text-main)', outline: 'none' }}
+            style={{ border: 'none', background: 'transparent', color: 'var(--text-main)', outline: 'none', width: '100%' }}
           />
           {filterDate && <X size={16} onClick={() => setFilterDate('')} style={{ cursor: 'pointer', color: '#ef4444' }} />}
         </div>
       </div>
 
-      <div className="card" style={{ padding: '0', overflowX: 'auto' }}>
+      <div className="desktop-only card" style={{ padding: '0', overflowX: 'auto' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead style={{ background: '#f8fafc', borderBottom: '1px solid var(--border)' }}>
             <tr>
@@ -206,20 +208,52 @@ function Expenses() {
                 </td>
               </tr>
             ))}
-            {filteredExpenses.length === 0 && (
-              <tr>
-                <td colSpan="5" style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>
-                  {loading ? 'Đang tải dữ liệu...' : 'Không có dữ liệu chi phí nào'}
-                </td>
-              </tr>
-            )}
           </tbody>
         </table>
       </div>
 
+      <div className="mobile-only" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+        {filteredExpenses.map(exp => (
+          <div key={exp.id} className="card" style={{ padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+              <div>
+                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '4px' }}>
+                  {format(new Date(exp.date), 'dd/MM/yyyy')}
+                </div>
+                <div style={{ fontWeight: '700', fontSize: '1rem', color: 'var(--text-main)' }}>{exp.purpose}</div>
+              </div>
+              <div style={{ fontWeight: '800', fontSize: '1.125rem', color: '#e11d48' }}>
+                {new Intl.NumberFormat('en-US').format(exp.amount)} đ
+              </div>
+            </div>
+            
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '0.75rem', borderTop: '1px solid #f1f5f9' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--text-muted)', fontSize: '0.875rem' }}>
+                <User size={14} />
+                <span>{exp.payer}</span>
+              </div>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button className="btn" style={{ padding: '6px 12px', background: '#f8fafc', border: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.75rem' }} onClick={() => handleEdit(exp)}>
+                  <Edit size={14} /> Sửa
+                </button>
+                <button className="btn" style={{ padding: '6px 12px', background: '#fff1f2', color: '#e11d48', border: '1px solid #fee2e2', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.75rem' }} onClick={() => handleDelete(exp.id)}>
+                  <Trash2 size={14} /> Xóa
+                </button>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {filteredExpenses.length === 0 && (
+        <div className="card" style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>
+          {loading ? 'Đang tải dữ liệu...' : 'Không có dữ liệu chi phí nào'}
+        </div>
+      )}
+
       {showModal && createPortal(
         <div className="modal-overlay">
-          <div className="modal-container" onClick={e => e.stopPropagation()}>
+          <div className="modal-container" onClick={e => e.stopPropagation()} style={{ maxWidth: '400px' }}>
             <button className="modal-close" onClick={() => setShowModal(null)}>
               <X size={20} />
             </button>

@@ -121,7 +121,7 @@ function Overview() {
           <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>Mã hàng hiện có trong hệ thống</p>
         </div>
 
-        <div className="card summary-card-mobile" style={{ borderLeft: '4px solid #10b981' }}>
+        <div className="card summary-card-mobile desktop-only" style={{ borderLeft: '4px solid #10b981' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '1rem' }}>
             <div className="card-icon" style={{ background: '#ecfdf5', padding: '10px', borderRadius: '10px' }}>
               <Tag color="#10b981" size={24} />
