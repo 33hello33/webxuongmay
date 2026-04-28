@@ -153,13 +153,13 @@ function Expenses() {
           {searchQuery && <X size={16} onClick={() => setSearchQuery('')} style={{ cursor: 'pointer', color: 'var(--text-muted)' }} />}
         </div>
         
-        <div className="card" style={{ padding: '0.5rem 1rem', display: 'flex', alignItems: 'center', gap: '10px', flex: '0 1 200px', margin: 0 }}>
+        <div className="card" style={{ padding: '0.5rem 1rem', display: 'flex', alignItems: 'center', gap: '10px', flex: '0 1 200px', margin: 0, cursor: 'pointer' }}>
           <Calendar size={20} color="var(--text-muted)" />
           <input
             type="date"
             value={filterDate}
             onChange={e => setFilterDate(e.target.value)}
-            style={{ border: 'none', background: 'transparent', color: 'var(--text-main)', outline: 'none', width: '100%' }}
+            style={{ border: 'none', background: 'transparent', color: 'var(--text-main)', outline: 'none', width: '100%', height: '100%', cursor: 'pointer' }}
           />
           {filterDate && <X size={16} onClick={() => setFilterDate('')} style={{ cursor: 'pointer', color: '#ef4444' }} />}
         </div>

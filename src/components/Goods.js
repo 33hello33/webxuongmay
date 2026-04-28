@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabase';
-import { Plus, ArrowDownLeft, ArrowUpRight, MoreVertical, X, Search, History, Clock } from 'lucide-react';
+import { Plus, ArrowDownLeft, ArrowUpRight, MoreVertical, X, Search, History, Clock, Calendar } from 'lucide-react';
 import { format } from 'date-fns';
 import { vi } from 'date-fns/locale';
 import { createPortal } from 'react-dom';
@@ -321,12 +321,13 @@ function Goods() {
               {filterBuyer && <X size={16} onClick={() => setFilterBuyer('')} style={{ cursor: 'pointer', color: '#ef4444' }} />}
             </div>
             
-            <div className="card" style={{ padding: '0.5rem 1rem', display: 'flex', alignItems: 'center', gap: '10px', flex: 1, margin: 0, height: '45px' }}>
+            <div className="card" style={{ padding: '0.5rem 1rem', display: 'flex', alignItems: 'center', gap: '10px', flex: 1, margin: 0, height: '45px', cursor: 'pointer' }}>
+              <Calendar size={20} color="var(--text-muted)" />
               <input
                 type="date"
                 value={filterDate}
                 onChange={e => setFilterDate(e.target.value)}
-                style={{ border: 'none', background: 'transparent', color: 'var(--text-main)', outline: 'none', width: '100%', padding: 0 }}
+                style={{ border: 'none', background: 'transparent', color: 'var(--text-main)', outline: 'none', width: '100%', height: '100%', padding: 0, cursor: 'pointer' }}
               />
               {filterDate && <X size={16} onClick={() => setFilterDate('')} style={{ cursor: 'pointer', color: '#ef4444' }} />}
             </div>
