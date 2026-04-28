@@ -7,7 +7,8 @@ import Shipping from './components/Shipping';
 import Config from './components/Config';
 import Expenses from './components/Expenses';
 import DefectiveGoods from './components/DefectiveGoods';
-import { LayoutDashboard, Box, Users, Bell, Truck, Settings, Wallet, X, AlertCircle } from 'lucide-react';
+import BaTam from './components/BaTam';
+import { LayoutDashboard, Box, Users, Bell, Truck, Settings, Wallet, X, AlertCircle, ShoppingBag } from 'lucide-react';
 
 function App() {
   const [activeTab, setActiveTab] = useState('overview');
@@ -41,6 +42,7 @@ function App() {
       case 'customers': return <Customers />;
       case 'shipping': return <Shipping />;
       case 'defective': return <DefectiveGoods />;
+      case 'batam': return <BaTam />;
       case 'expenses': return <Expenses />;
       case 'config': return <Config />;
       default: return <Overview />;
@@ -81,6 +83,15 @@ function App() {
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <Truck size={18} />
               <span>Hàng gửi</span>
+            </div>
+          </button>
+          <button
+            className={`tab-btn ${activeTab === 'batam' ? 'active' : ''}`}
+            onClick={() => setActiveTab('batam')}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <ShoppingBag size={18} />
+              <span>Bà tám</span>
             </div>
           </button>
           <button

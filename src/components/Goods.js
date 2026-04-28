@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabase';
-import { Plus, ArrowDownLeft, ArrowUpRight, MoreVertical, X, Search, History, Clock, Calendar } from 'lucide-react';
+import { Plus, ArrowDownLeft, ArrowUpRight, History, X, Search, Calendar, Package } from 'lucide-react';
 import { format } from 'date-fns';
 import { vi } from 'date-fns/locale';
 import { createPortal } from 'react-dom';
@@ -19,8 +19,11 @@ function Goods() {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterDate, setFilterDate] = useState('');
   const [filterBuyer, setFilterBuyer] = useState('');
+  const [sortBy, setSortBy] = useState('id');
+  const [sortOrder, setSortOrder] = useState('desc');
+  const [displayLimit, setDisplayLimit] = useState(15);
+  const [loadingMore, setLoadingMore] = useState(false);
 
-  // Form states
   const [formData, setFormData] = useState({
     name: '',
     description: '',
@@ -29,6 +32,7 @@ function Goods() {
     image_url: '',
     quantity: '',
     buyer: '',
+    recorder: 'của mình',
     is_low_stock: false
   });
   const [imageFile, setImageFile] = useState(null);
@@ -40,8 +44,12 @@ function Goods() {
     fetchTransactions();
   }, []);
 
+  useEffect(() => {
+    setDisplayLimit(15);
+  }, [searchQuery, filterDate, filterBuyer, sortBy, sortOrder]);
+
   const fetchProducts = async () => {
-    const { data } = await supabase.from('products').select('*').order('name');
+    const { data } = await supabase.from('products').select('*').order('id', { ascending: false });
     if (data) setProducts(data);
   };
 
@@ -81,8 +89,6 @@ function Goods() {
     }
   };
 
-
-
   const handleEdit = (product) => {
     setSelectedProduct(product);
     setFormData({
@@ -102,16 +108,11 @@ function Goods() {
   const handleSaveProduct = async (e) => {
     e.preventDefault();
     setLoading(true);
-
     let finalImageUrl = formData.image_url;
-
     if (imageFile) {
       const uploadedUrl = await uploadImage(imageFile);
-      if (uploadedUrl) {
-        finalImageUrl = uploadedUrl;
-      }
+      if (uploadedUrl) finalImageUrl = uploadedUrl;
     }
-
     const tagsArray = formData.tags.split(',').map(t => t.trim()).filter(t => t);
     const productData = {
       name: formData.name,
@@ -120,10 +121,10 @@ function Goods() {
       image_url: finalImageUrl,
       buyer: formData.buyer,
       is_low_stock: formData.is_low_stock,
+      quantity: formData.quantity
     };
 
     if (showModal === 'add_product') {
-      productData.quantity = formData.quantity;
       const { error } = await supabase.from('products').insert([productData]);
       if (!error) {
         setShowModal(null);
@@ -131,36 +132,31 @@ function Goods() {
         resetForm();
       }
     } else if (showModal === 'edit_product') {
-      productData.quantity = formData.quantity;
-      const { error } = await supabase
-        .from('products')
-        .update(productData)
-        .eq('id', selectedProduct?.id);
-
+      const { error } = await supabase.from('products').update(productData).eq('id', selectedProduct?.id);
       if (!error) {
         setShowModal(null);
         fetchProducts();
         resetForm();
       }
     }
-
     setLoading(false);
   };
 
   const handleToggleLowStock = async (product) => {
     const newStatus = !product.is_low_stock;
     setLoading(true);
-    const { error } = await supabase
-      .from('products')
-      .update({ is_low_stock: newStatus })
-      .eq('id', product.id);
-
-    if (!error) {
-      fetchProducts();
-    } else {
-      alert("Có lỗi xảy ra: " + error.message);
-    }
+    const { error } = await supabase.from('products').update({ is_low_stock: newStatus }).eq('id', product.id);
+    if (!error) fetchProducts();
     setLoading(false);
+  };
+
+  const handleSort = (field) => {
+    if (sortBy === field) {
+      setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortBy(field);
+      setSortOrder('desc');
+    }
   };
 
   const smartUpdateQuantity = (current, delta, isAdd) => {
@@ -182,12 +178,9 @@ function Goods() {
       }
       return { list, map };
     };
-
     const curr = parse(current || "");
     const dlt = parse(delta || "");
-
     if (dlt.list.length === 0) return current;
-
     dlt.list.forEach(unit => {
       if (curr.map[unit] === undefined) {
         curr.list.push(unit);
@@ -196,7 +189,6 @@ function Goods() {
         curr.map[unit] += isAdd ? dlt.map[unit] : -dlt.map[unit];
       }
     });
-
     return curr.list
       .map(unit => {
         const v = curr.map[unit];
@@ -214,30 +206,23 @@ function Goods() {
     const prevQty = selectedProduct?.quantity || "";
     const newQty = smartUpdateQuantity(prevQty, qtyText, type === 'import');
 
-    // 1. Create transaction record
-    const { error: txError } = await supabase.from('transactions').insert([
-      {
-        product_id: selectedProduct?.id,
-        type,
-        quantity: qtyText,
-        prev_quantity: prevQty,
-        new_quantity: newQty,
-        date: new Date().toISOString(),
-        buyer_id: type === 'export' ? formData.buyer_id : null
-      }
-    ]);
+    const { error: txError } = await supabase.from('transactions').insert([{
+      product_id: selectedProduct?.id,
+      type,
+      quantity: qtyText,
+      prev_quantity: prevQty,
+      new_quantity: newQty,
+      date: new Date().toISOString(),
+      notes: formData.recorder
+    }]);
 
-    // 2. Smart update product quantity
     if (!txError && selectedProduct) {
       await supabase.from('products').update({ quantity: newQty }).eq('id', selectedProduct.id);
-    }
-
-    if (!txError) {
       setShowModal(null);
       fetchProducts();
       fetchTransactions();
       resetForm();
-    } else {
+    } else if (txError) {
       alert("Lỗi: " + txError.message);
     }
     setLoading(false);
@@ -245,37 +230,36 @@ function Goods() {
 
   const getFilteredProducts = () => {
     let result = products;
-
-    if (filterDate) {
-      result = result.filter(p => p.created_at && format(new Date(p.created_at), 'yyyy-MM-dd') === filterDate);
+    if (filterDate) result = result.filter(p => p.created_at && format(new Date(p.created_at), 'yyyy-MM-dd') === filterDate);
+    if (filterBuyer) result = result.filter(p => p.buyer?.toLowerCase().trim() === filterBuyer);
+    if (searchQuery.trim()) {
+      const searchTerms = searchQuery.toLowerCase().split(/[\s,]+/).filter(t => t.length > 0);
+      result = result.filter(product => {
+        const productTags = (product.tags || []).map(t => t.toLowerCase());
+        const description = (product.description || '').toLowerCase();
+        const name = (product.name || '').toLowerCase();
+        const dateStr = product.created_at ? format(new Date(product.created_at), 'dd/MM/yyyy') : '';
+        return searchTerms.every(term =>
+          productTags.some(tag => tag.includes(term)) ||
+          description.includes(term) ||
+          name.includes(term) ||
+          dateStr.includes(term)
+        );
+      });
     }
-
-    if (filterBuyer) {
-      result = result.filter(p => p.buyer?.toLowerCase().trim() === filterBuyer);
-    }
-
-    if (!searchQuery.trim()) return result;
-    const searchTerms = searchQuery.toLowerCase().split(/[\s,]+/).filter(t => t.length > 0);
-
-    return result.filter(product => {
-      const productTags = (product.tags || []).map(t => t.toLowerCase());
-      const description = (product.description || '').toLowerCase();
-      const name = (product.name || '').toLowerCase();
-      const dateStr = product.created_at ? format(new Date(product.created_at), 'dd/MM/yyyy') : '';
-
-      return searchTerms.every(term =>
-        productTags.some(tag => tag.includes(term)) ||
-        description.includes(term) ||
-        name.includes(term) ||
-        dateStr.includes(term)
-      );
+    return [...result].sort((a, b) => {
+      let comparison = 0;
+      if (sortBy === 'id') comparison = a.id - b.id;
+      else if (sortBy === 'name') comparison = (a.name || '').localeCompare(b.name || '');
+      else if (sortBy === 'created_at') comparison = new Date(a.created_at || 0) - new Date(b.created_at || 0);
+      return sortOrder === 'desc' ? -comparison : comparison;
     });
   };
 
   const filtered = getFilteredProducts();
 
   const resetForm = () => {
-    setFormData({ name: '', description: '', min_quantity: 5, tags: '', image_url: '', quantity: '', buyer: 'của mình', is_low_stock: false });
+    setFormData({ name: '', description: '', min_quantity: 5, tags: '', image_url: '', quantity: '', buyer: '', recorder: 'của mình', is_low_stock: false });
     setSelectedProduct(null);
     setImageFile(null);
     setImagePreview(null);
@@ -289,6 +273,13 @@ function Goods() {
           <button className="btn btn-primary" onClick={() => { resetForm(); setShowModal('add_product'); }} style={{ width: '100%' }}>
             <Plus size={18} style={{ marginRight: '8px' }} /> Thêm NVL mới
           </button>
+        </div>
+      </div>
+
+      <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem', flexWrap: 'wrap' }}>
+        <div className="card" style={{ display: 'flex', gap: '10px', padding: '0.5rem 1rem', borderRadius: '12px', flex: '1 1 300px' }}>
+          <button className={`btn ${view === 'list' ? 'btn-primary' : 'btn-ghost'}`} onClick={() => setView('list')} style={{ flex: 1 }}>Sản phẩm</button>
+          <button className={`btn ${view === 'history' ? 'btn-primary' : 'btn-ghost'}`} onClick={() => setView('history')} style={{ flex: 1 }}>Lịch sử nhập/xuất</button>
         </div>
       </div>
 
@@ -306,14 +297,14 @@ function Goods() {
             {searchQuery && <X size={16} onClick={() => setSearchQuery('')} style={{ cursor: 'pointer', color: 'var(--text-muted)' }} />}
           </div>
           
-          <div style={{ display: 'flex', gap: '10px', flex: '1 1 300px', maxWidth: '450px' }}>
-            <div className="card" style={{ padding: '0.5rem 1rem', display: 'flex', alignItems: 'center', gap: '10px', flex: 1, margin: 0, height: '45px' }}>
+          <div style={{ display: 'flex', gap: '10px', flex: '1 1 400px', maxWidth: '600px' }}>
+            <div className="card" style={{ padding: '0.5rem 1rem', display: 'flex', alignItems: 'center', gap: '10px', flex: '1.5', margin: 0, height: '45px' }}>
               <select
                 value={filterBuyer}
                 onChange={e => setFilterBuyer(e.target.value)}
                 style={{ border: 'none', background: 'transparent', color: 'var(--text-main)', outline: 'none', cursor: 'pointer', width: '100%', padding: 0 }}
               >
-                <option value="">Người mua</option>
+                <option value="">Người mua / Nguồn</option>
                 {[...new Set(products.map(p => p.buyer?.toLowerCase().trim()).filter(Boolean))].sort().map(buyer => (
                   <option key={buyer} value={buyer}>{buyer}</option>
                 ))}
@@ -337,13 +328,28 @@ function Goods() {
 
       {view === 'list' ? (
         <div className="card" style={{ padding: '0', overflowX: 'auto' }}>
-          {/* Desktop Table */}
+          {/* Desktop Table View */}
           <table className="desktop-only" style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead style={{ background: '#f8fafc', borderBottom: '1px solid var(--border)' }}>
               <tr>
-                <th style={{ textAlign: 'left', padding: '1rem', color: 'var(--text-muted)', fontSize: '0.75rem', textTransform: 'uppercase' }}>ID</th>
-                <th style={{ textAlign: 'left', padding: '1rem', color: 'var(--text-muted)', fontSize: '0.75rem', textTransform: 'uppercase' }}>Ngày nhập</th>
-                <th style={{ textAlign: 'left', padding: '1rem', color: 'var(--text-muted)', fontSize: '0.75rem', textTransform: 'uppercase' }}>Sản phẩm</th>
+                <th 
+                  onClick={() => handleSort('id')}
+                  style={{ textAlign: 'left', padding: '1rem', color: sortBy === 'id' ? 'var(--primary)' : 'var(--text-muted)', fontSize: '0.75rem', textTransform: 'uppercase', cursor: 'pointer', userSelect: 'none' }}
+                >
+                  ID {sortBy === 'id' && (sortOrder === 'desc' ? '↓' : '↑')}
+                </th>
+                <th 
+                  onClick={() => handleSort('created_at')}
+                  style={{ textAlign: 'left', padding: '1rem', color: sortBy === 'created_at' ? 'var(--primary)' : 'var(--text-muted)', fontSize: '0.75rem', textTransform: 'uppercase', cursor: 'pointer', userSelect: 'none' }}
+                >
+                  Ngày nhập {sortBy === 'created_at' && (sortOrder === 'desc' ? '↓' : '↑')}
+                </th>
+                <th 
+                  onClick={() => handleSort('name')}
+                  style={{ textAlign: 'left', padding: '1rem', color: sortBy === 'name' ? 'var(--primary)' : 'var(--text-muted)', fontSize: '0.75rem', textTransform: 'uppercase', cursor: 'pointer', userSelect: 'none' }}
+                >
+                  Sản phẩm {sortBy === 'name' && (sortOrder === 'desc' ? '↓' : '↑')}
+                </th>
                 <th style={{ textAlign: 'left', padding: '1rem', color: 'var(--text-muted)', fontSize: '0.75rem', textTransform: 'uppercase' }}>Phân loại (Tags)</th>
                 <th style={{ textAlign: 'center', padding: '1rem', color: 'var(--text-muted)', fontSize: '0.75rem', textTransform: 'uppercase' }}>Tình trạng</th>
                 <th style={{ textAlign: 'center', padding: '1rem', color: 'var(--text-muted)', fontSize: '0.75rem', textTransform: 'uppercase' }}>Số lượng</th>
@@ -352,7 +358,7 @@ function Goods() {
               </tr>
             </thead>
             <tbody>
-              {filtered.map(p => (
+              {filtered.slice(0, displayLimit).map(p => (
                 <tr key={p.id} style={{ borderBottom: '1px solid var(--border)', transition: 'background 0.2s' }}>
                   <td style={{ padding: '1rem', fontSize: '0.875rem', fontWeight: '700', color: 'var(--primary)' }}>#{p.id}</td>
                   <td style={{ padding: '1rem', fontSize: '0.875rem' }}>
@@ -361,14 +367,7 @@ function Goods() {
                   <td style={{ padding: '1rem' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                       <div style={{ width: '150px', height: '150px', background: '#f1f5f9', borderRadius: '16px', overflow: 'hidden', flexShrink: 0 }}>
-                        {p.image_url && (
-                          <img
-                            src={p.image_url}
-                            alt=""
-                            referrerPolicy="no-referrer"
-                            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                          />
-                        )}
+                        {p.image_url && <img src={p.image_url} alt="" referrerPolicy="no-referrer" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />}
                       </div>
                       <div>
                         <div style={{ fontWeight: '600' }}>{p.name}</div>
@@ -393,21 +392,11 @@ function Goods() {
                   <td style={{ padding: '1rem', color: 'var(--text-muted)' }}>{p.buyer || '—'}</td>
                   <td style={{ padding: '1rem', textAlign: 'right' }}>
                     <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
-                      <button className="btn" style={{ padding: '6px 10px', background: '#ecfdf5', color: '#059669', fontSize: '0.75rem' }} onClick={() => { setSelectedProduct(p); setShowModal('import'); }}>
-                        Nhập
-                      </button>
-                      <button className="btn" style={{ padding: '6px 10px', background: '#fff1f2', color: '#e11d48', fontSize: '0.75rem' }} onClick={() => { setSelectedProduct(p); setShowModal('export'); }}>
-                        Xuất
-                      </button>
-                      <button className="btn" style={{ padding: '6px', background: '#f8fafc', border: '1px solid var(--border)' }} onClick={() => handleEdit(p)} title="Sửa">
-                        Sửa
-                      </button>
-                      <button className="btn" style={{ padding: '6px', background: '#f1f5f9', border: '1px solid var(--border)' }} onClick={() => handleShowHistory(p)} title="Lịch sử">
-                        <History size={16} />
-                      </button>
-                      <button className="btn" style={{ padding: '6px 10px', background: p.is_low_stock ? '#fee2e2' : '#fffbeb', color: p.is_low_stock ? '#ef4444' : '#92400e', fontSize: '0.75rem' }} onClick={() => handleToggleLowStock(p)}>
-                        {p.is_low_stock ? 'Đã nhập' : 'Báo hết'}
-                      </button>
+                      <button className="btn" style={{ padding: '6px 10px', background: '#ecfdf5', color: '#059669', fontSize: '0.75rem' }} onClick={() => { setSelectedProduct(p); setShowModal('import'); }}>Nhập</button>
+                      <button className="btn" style={{ padding: '6px 10px', background: '#fff1f2', color: '#e11d48', fontSize: '0.75rem' }} onClick={() => { setSelectedProduct(p); setShowModal('export'); }}>Xuất</button>
+                      <button className="btn" style={{ padding: '6px', background: '#f8fafc', border: '1px solid var(--border)' }} onClick={() => handleEdit(p)} title="Sửa">Sửa</button>
+                      <button className="btn" style={{ padding: '6px', background: '#f1f5f9', border: '1px solid var(--border)' }} onClick={() => handleShowHistory(p)} title="Lịch sử"><History size={16} /></button>
+                      <button className="btn" style={{ padding: '6px 10px', background: p.is_low_stock ? '#fee2e2' : '#fffbeb', color: p.is_low_stock ? '#ef4444' : '#92400e', fontSize: '0.75rem' }} onClick={() => handleToggleLowStock(p)}>{p.is_low_stock ? 'Đã nhập' : 'Báo hết'}</button>
                     </div>
                   </td>
                 </tr>
@@ -415,18 +404,13 @@ function Goods() {
             </tbody>
           </table>
 
-          {/* Mobile Card List */}
+          {/* Mobile Card List View */}
           <div className="mobile-only">
-            {filtered.map(p => (
+            {filtered.slice(0, displayLimit).map(p => (
               <div key={p.id} className="mobile-table-card">
                 <div style={{ display: 'flex', gap: '12px' }}>
                   <div style={{ width: '150px', height: '150px', background: '#f1f5f9', borderRadius: '16px', overflow: 'hidden', flexShrink: 0 }}>
-                    {p.image_url && <img
-                      src={p.image_url}
-                      alt=""
-                      referrerPolicy="no-referrer"
-                      style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                    />}
+                    {p.image_url && <img src={p.image_url} alt="" referrerPolicy="no-referrer" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />}
                   </div>
                   <div style={{ flex: 1 }}>
                     <div style={{ fontWeight: '700', fontSize: '1rem' }}>#{p.id} - {p.name}</div>
@@ -442,41 +426,45 @@ function Goods() {
 
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#f8fafc', padding: '8px', borderRadius: '8px' }}>
                   <div style={{ fontSize: '0.875rem' }}>
-                    Tình trạng: {p.is_low_stock ?
-                      <span style={{ color: '#ef4444', fontWeight: '700' }}>Sắp hết</span> :
-                      <span style={{ color: '#22c55e', fontWeight: '700' }}>Sẵn hàng</span>
-                    }
+                    Tình trạng: {p.is_low_stock ? <span style={{ color: '#ef4444', fontWeight: '700' }}>Sắp hết</span> : <span style={{ color: '#22c55e', fontWeight: '700' }}>Sẵn hàng</span>}
                     <div style={{ marginTop: '4px' }}>
                       Số lượng: <span style={{ fontWeight: '700', color: p.is_low_stock ? '#ef4444' : 'var(--text-main)' }}>{p.quantity}</span>
                     </div>
                   </div>
-                  {p.buyer && (
-                    <div style={{ fontSize: '0.875rem', color: 'var(--primary)', fontWeight: '500' }}>
-                      Mua bởi: {p.buyer}
-                    </div>
-                  )}
+                  {p.buyer && <div style={{ fontSize: '0.875rem', color: 'var(--primary)', fontWeight: '500' }}>Mua bởi: {p.buyer}</div>}
                 </div>
 
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-                  <button className="btn" style={{ flex: 1, padding: '8px', background: '#ecfdf5', color: '#059669', fontSize: '0.75rem' }} onClick={() => { setSelectedProduct(p); setShowModal('import'); }}>
-                    Nhập
-                  </button>
-                  <button className="btn" style={{ flex: 1, padding: '8px', background: '#fff1f2', color: '#e11d48', fontSize: '0.75rem' }} onClick={() => { setSelectedProduct(p); setShowModal('export'); }}>
-                    Xuất
-                  </button>
-                  <button className="btn" style={{ flex: 1, padding: '8px', background: '#f1f5f9', color: 'var(--text-main)', fontSize: '0.75rem' }} onClick={() => handleEdit(p)}>
-                    Sửa
-                  </button>
-                  <button className="btn" style={{ flex: 1, padding: '8px', background: '#f1f5f9', color: 'var(--text-main)', fontSize: '0.75rem' }} onClick={() => handleShowHistory(p)}>
-                    Lịch sử
-                  </button>
-                  <button className="btn" style={{ flex: 1, padding: '8px', background: p.is_low_stock ? '#fee2e2' : '#fffbeb', color: p.is_low_stock ? '#ef4444' : '#92400e', fontSize: '0.75rem' }} onClick={() => handleToggleLowStock(p)}>
-                    {p.is_low_stock ? 'Đã nhập' : 'Hết'}
-                  </button>
+                  <button className="btn" style={{ flex: 1, padding: '8px', background: '#ecfdf5', color: '#059669', fontSize: '0.75rem' }} onClick={() => { setSelectedProduct(p); setShowModal('import'); }}>Nhập</button>
+                  <button className="btn" style={{ flex: 1, padding: '8px', background: '#fff1f2', color: '#e11d48', fontSize: '0.75rem' }} onClick={() => { setSelectedProduct(p); setShowModal('export'); }}>Xuất</button>
+                  <button className="btn" style={{ flex: 1, padding: '8px', background: '#f1f5f9', color: 'var(--text-main)', fontSize: '0.75rem' }} onClick={() => handleEdit(p)}>Sửa</button>
+                  <button className="btn" style={{ flex: 1, padding: '8px', background: '#f1f5f9', color: 'var(--text-main)', fontSize: '0.75rem' }} onClick={() => handleShowHistory(p)}>Lịch sử</button>
+                  <button className="btn" style={{ flex: 1, padding: '8px', background: p.is_low_stock ? '#fee2e2' : '#fffbeb', color: p.is_low_stock ? '#ef4444' : '#92400e', fontSize: '0.75rem' }} onClick={() => handleToggleLowStock(p)}>{p.is_low_stock ? 'Đã nhập' : 'Hết'}</button>
                 </div>
               </div>
             ))}
           </div>
+
+          {filtered.length > displayLimit && (
+            <div 
+              style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}
+              ref={(el) => {
+                if (!el) return;
+                const observer = new IntersectionObserver((entries) => {
+                  if (entries[0].isIntersecting && !loadingMore) {
+                    setLoadingMore(true);
+                    setTimeout(() => {
+                      setDisplayLimit(prev => prev + 15);
+                      setLoadingMore(false);
+                    }, 200);
+                  }
+                }, { threshold: 0.1 });
+                observer.observe(el);
+              }}
+            >
+              {loadingMore ? 'Đang tải thêm...' : 'Cuộn xuống để xem thêm...'}
+            </div>
+          )}
         </div>
       ) : (
         <div className="card" style={{ padding: '0', overflowX: 'auto' }}>
@@ -494,9 +482,7 @@ function Goods() {
             <tbody>
               {transactions.map(t => (
                 <tr key={t.id} style={{ borderBottom: '1px solid var(--border)' }}>
-                  <td style={{ padding: '1rem', fontSize: '0.875rem' }}>
-                    {format(new Date(t.date), 'dd/MM/yyyy HH:mm', { locale: vi })}
-                  </td>
+                  <td style={{ padding: '1rem', fontSize: '0.875rem' }}>{format(new Date(t.date), 'dd/MM/yyyy HH:mm', { locale: vi })}</td>
                   <td style={{ padding: '1rem', fontWeight: '500' }}>{t.products?.name}</td>
                   <td style={{ padding: '1rem', textAlign: 'center' }}>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', color: t.type === 'import' ? '#059669' : '#e11d48' }}>
@@ -510,7 +496,7 @@ function Goods() {
                     <span style={{ margin: '0 8px', color: 'var(--primary)' }}>→</span>
                     <span style={{ fontWeight: '600' }}>{t.new_quantity || '—'}</span>
                   </td>
-                  <td style={{ padding: '1rem', color: 'var(--text-muted)' }}>{t.customers?.name || '—'}</td>
+                  <td style={{ padding: '1rem', color: 'var(--text-muted)' }}>{t.customers?.name}{t.notes && t.customers?.name ? ` (${t.notes})` : t.notes || '—'}</td>
                 </tr>
               ))}
             </tbody>
@@ -521,9 +507,7 @@ function Goods() {
       {showModal && createPortal(
         <div className="modal-overlay">
           <div className="modal-container" onClick={e => e.stopPropagation()}>
-            <button className="modal-close" onClick={() => setShowModal(null)}>
-              <X size={20} />
-            </button>
+            <button className="modal-close" onClick={() => setShowModal(null)}><X size={20} /></button>
             <h2 style={{ marginBottom: '1.5rem' }}>
               {showModal === 'add_product' ? 'Thêm NVL mới' : showModal === 'edit_product' ? 'Sửa thông tin hàng hóa' : showModal === 'import' ? `Nhập hàng: ${selectedProduct?.name}` : `Xuất hàng: ${selectedProduct?.name}`}
             </h2>
@@ -532,110 +516,42 @@ function Goods() {
               {['add_product', 'edit_product'].includes(showModal) ? (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                   <div style={{ display: 'grid', gridTemplateColumns: 'minmax(120px, 1fr) 2.5fr', gap: '1.5rem' }}>
-                    {/* Left: Image */}
                     <div>
                       <label>Ảnh sản phẩm</label>
                       <div
                         onClick={() => document.getElementById('image-upload').click()}
-                        style={{
-                          width: '100%',
-                          aspectRatio: '1/1',
-                          border: '2px dashed var(--border)',
-                          borderRadius: '12px',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          cursor: 'pointer',
-                          background: '#f8fafc',
-                          overflow: 'hidden'
-                        }}
+                        style={{ width: '100%', aspectRatio: '1/1', border: '2px dashed var(--border)', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', background: '#f8fafc', overflow: 'hidden' }}
                       >
-                        {imagePreview ? (
-                          <img
-                            src={imagePreview}
-                            alt="Preview"
-                            referrerPolicy="no-referrer"
-                            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                          />
-                        ) : (
-                          <div style={{ textAlign: 'center' }}>
-                            <Plus size={24} color="var(--text-muted)" />
-                            <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Chọn ảnh</div>
-                          </div>
-                        )}
+                        {imagePreview ? <img src={imagePreview} alt="Preview" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <div style={{ textAlign: 'center' }}><Plus size={24} color="var(--text-muted)" /><div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Chọn ảnh</div></div>}
                       </div>
-                      <input
-                        id="image-upload"
-                        type="file"
-                        accept="image/*"
-                        onChange={handleFileChange}
-                        style={{ display: 'none' }}
-                      />
+                      <input id="image-upload" type="file" accept="image/*" onChange={handleFileChange} style={{ display: 'none' }} />
                     </div>
-
-                    {/* Right: Main Info */}
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                      <div>
-                        <label>Tên hàng hóa</label>
-                        <input required value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} />
-                      </div>
-                      
+                      <div><label>Tên hàng hóa</label><input required value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} /></div>
                       <div>
                         <label>{showModal === 'add_product' ? 'Tồn ban đầu' : 'Số lượng hiện tại'}</label>
-                        <input
-                          type="text"
-                          placeholder="VD: 10 cuộn..."
-                          value={formData.quantity}
-                          onChange={e => setFormData({ ...formData, quantity: e.target.value })}
-                        />
+                        <input type="text" placeholder="VD: 10 cuộn..." value={formData.quantity} onChange={e => setFormData({ ...formData, quantity: e.target.value })} />
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '6px' }}>
-                          <input
-                            type="checkbox"
-                            id="is_low_stock"
-                            style={{ width: '16px', height: '16px', cursor: 'pointer', margin: 0 }}
-                            checked={formData.is_low_stock}
-                            onChange={e => setFormData({ ...formData, is_low_stock: e.target.checked })}
-                          />
-                          <label htmlFor="is_low_stock" style={{ margin: 0, fontSize: '0.8125rem', fontWeight: '500', cursor: 'pointer' }}>
-                            Đánh dấu là sắp hết hàng
-                          </label>
+                          <input type="checkbox" id="is_low_stock" style={{ width: '16px', height: '16px', cursor: 'pointer', margin: 0 }} checked={formData.is_low_stock} onChange={e => setFormData({ ...formData, is_low_stock: e.target.checked })} />
+                          <label htmlFor="is_low_stock" style={{ margin: 0, fontSize: '0.8125rem', fontWeight: '500', cursor: 'pointer' }}>Đánh dấu là sắp hết hàng</label>
                         </div>
                       </div>
-
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <label style={{ margin: 0, whiteSpace: 'nowrap', flexShrink: 0 }}>Người mua:</label>
-                        <input 
-                          placeholder="Người mua / Nguồn hàng..." 
-                          value={formData.buyer} 
-                          onChange={e => setFormData({ ...formData, buyer: e.target.value })} 
-                          style={{ padding: '4px 8px' }}
-                        />
-                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><label style={{ margin: 0, whiteSpace: 'nowrap', flexShrink: 0 }}>Người mua:</label><input placeholder="Người mua / Nguồn hàng..." value={formData.buyer} onChange={e => setFormData({ ...formData, buyer: e.target.value })} style={{ padding: '4px 8px' }} /></div>
                     </div>
                   </div>
-
-                  <div>
-                    <label>Tags (cách nhau bởi dấu phẩy)</label>
-                    <input placeholder="Vải, Cotton, Mùa hè..." value={formData.tags} onChange={e => setFormData({ ...formData, tags: e.target.value })} />
-                  </div>
-
-                  <div>
-                    <label>Mô tả chi tiết</label>
-                    <textarea value={formData.description} rows="2" onChange={e => setFormData({ ...formData, description: e.target.value })} style={{ height: '60px' }} />
-                  </div>
+                  <div><label>Tags (cách nhau bởi dấu phẩy)</label><input placeholder="Vải, Cotton, Mùa hè..." value={formData.tags} onChange={e => setFormData({ ...formData, tags: e.target.value })} /></div>
+                  <div><label>Mô tả chi tiết</label><textarea value={formData.description} rows="2" onChange={e => setFormData({ ...formData, description: e.target.value })} style={{ height: '60px' }} /></div>
                 </div>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                   <div><label style={{ display: 'block', marginBottom: '4px', fontSize: '0.875rem', fontWeight: '500' }}>Số lượng {showModal === 'import' ? 'nhập' : 'xuất'} (Text)</label><input type="text" placeholder="VD: 2 cuộn..." required value={formData.quantity} onChange={e => setFormData({ ...formData, quantity: e.target.value })} /></div>
-                  {showModal === 'export' && (
-                    <div>
-                      <label style={{ display: 'block', marginBottom: '4px', fontSize: '0.875rem', fontWeight: '500' }}>Khách hàng (Người mua)</label>
-                      <select value={formData.buyer_id} onChange={e => setFormData({ ...formData, buyer_id: e.target.value })}>
-                        <option value="">Người mua...</option>
-                        {customers.map(c => <option key={c.id} value={c.id}>{c.name} - {c.phone}</option>)}
-                      </select>
+                  <div>
+                    <label style={{ display: 'block', marginBottom: '4px', fontSize: '0.875rem', fontWeight: '500' }}>Người {showModal === 'import' ? 'nhập' : 'xuất'}</label>
+                    <input type="text" value={formData.recorder} onChange={e => setFormData({ ...formData, recorder: e.target.value })} placeholder="Chọn hoặc nhập tên..." />
+                    <div style={{ display: 'flex', gap: '8px', marginTop: '6px' }}>
+                      {['của mình', 'bà tám'].map(name => <button key={name} type="button" onClick={() => setFormData({ ...formData, recorder: name })} style={{ padding: '4px 12px', fontSize: '0.75rem', borderRadius: '20px', border: '1px solid var(--border)', background: formData.recorder === name ? 'var(--primary)' : 'white', color: formData.recorder === name ? 'white' : 'var(--text-main)', cursor: 'pointer' }}>{name}</button>)}
                     </div>
-                  )}
+                  </div>
                 </div>
               )}
               <div style={{ marginTop: '2rem', display: 'flex', gap: '10px' }}>
@@ -651,19 +567,11 @@ function Goods() {
       {showHistory && createPortal(
         <div className="modal-overlay">
           <div className="modal-container" style={{ maxWidth: '800px' }} onClick={e => e.stopPropagation()}>
-            <button className="modal-close" onClick={() => setShowHistory(false)}>
-              <X size={20} />
-            </button>
+            <button className="modal-close" onClick={() => setShowHistory(false)}><X size={20} /></button>
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '1.5rem' }}>
-              <div style={{ background: '#eff6ff', padding: '10px', borderRadius: '10px' }}>
-                <History color="var(--primary)" size={24} />
-              </div>
-              <div>
-                <h2 style={{ fontSize: '1.25rem' }}>Ghi chú nhập xuất: {selectedProduct?.name}</h2>
-                <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>Mã hàng: #{selectedProduct?.id}</p>
-              </div>
+              <div style={{ background: '#eff6ff', padding: '10px', borderRadius: '10px' }}><History color="var(--primary)" size={24} /></div>
+              <div><h2 style={{ fontSize: '1.25rem' }}>Ghi chú nhập xuất: {selectedProduct?.name}</h2><p style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>Mã hàng: #{selectedProduct?.id}</p></div>
             </div>
-
             <div style={{ overflowX: 'auto' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                 <thead style={{ background: '#f8fafc', borderBottom: '1px solid var(--border)' }}>
@@ -678,46 +586,17 @@ function Goods() {
                 <tbody>
                   {productHistory.map(t => (
                     <tr key={t.id} style={{ borderBottom: '1px solid var(--border)' }}>
-                      <td style={{ padding: '1rem', fontSize: '0.875rem' }}>
-                        {format(new Date(t.date), 'dd/MM/yyyy HH:mm', { locale: vi })}
-                      </td>
-                      <td style={{ padding: '1rem', textAlign: 'center' }}>
-                        <span style={{
-                          fontSize: '0.75rem',
-                          fontWeight: '700',
-                          padding: '4px 8px',
-                          borderRadius: '4px',
-                          background: t.type === 'import' ? '#ecfdf5' : t.type === 'export' ? '#fff1f2' : '#f5f3ff',
-                          color: t.type === 'import' ? '#059669' : t.type === 'export' ? '#e11d48' : '#8b5cf6'
-                        }}>
-                          {t.type === 'import' ? 'NHẬP' : t.type === 'export' ? 'XUẤT' : 'GỬI'}
-                        </span>
-                      </td>
+                      <td style={{ padding: '1rem', fontSize: '0.875rem' }}>{format(new Date(t.date), 'dd/MM/yyyy HH:mm', { locale: vi })}</td>
+                      <td style={{ padding: '1rem', textAlign: 'center' }}><span style={{ fontSize: '0.75rem', fontWeight: '700', padding: '4px 8px', borderRadius: '4px', background: t.type === 'import' ? '#ecfdf5' : '#fff1f2', color: t.type === 'import' ? '#059669' : '#e11d48' }}>{t.type === 'import' ? 'NHẬP' : 'XUẤT'}</span></td>
                       <td style={{ padding: '1rem', textAlign: 'center', fontWeight: '700' }}>{t.quantity}</td>
-                      <td style={{ padding: '1rem', textAlign: 'center', fontSize: '0.875rem' }}>
-                        <div style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>{t.prev_quantity || '—'}</div>
-                        <div style={{ margin: '2px 0', lineHeight: 1, color: 'var(--primary)' }}>↓</div>
-                        <div style={{ fontWeight: '600', color: 'var(--text-main)' }}>{t.new_quantity || '—'}</div>
-                      </td>
-                      <td style={{ padding: '1rem', fontSize: '0.875rem', color: 'var(--text-muted)' }}>
-                        {t.customers?.name || t.notes || '—'}
-                      </td>
+                      <td style={{ padding: '1rem', textAlign: 'center', fontSize: '0.875rem' }}><div style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>{t.prev_quantity || '—'}</div><div style={{ margin: '2px 0', lineHeight: 1, color: 'var(--primary)' }}>↓</div><div style={{ fontWeight: '600', color: 'var(--text-main)' }}>{t.new_quantity || '—'}</div></td>
+                      <td style={{ padding: '1rem', fontSize: '0.875rem', color: 'var(--text-muted)' }}>{t.customers?.name}{t.notes && t.customers?.name ? ` (${t.notes})` : t.notes || '—'}</td>
                     </tr>
                   ))}
-                  {productHistory.length === 0 && (
-                    <tr>
-                      <td colSpan="4" style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>
-                        Chưa có lịch sử giao dịch cho sản phẩm này.
-                      </td>
-                    </tr>
-                  )}
                 </tbody>
               </table>
             </div>
-
-            <div style={{ marginTop: '2rem', textAlign: 'right' }}>
-              <button className="btn" style={{ background: '#f1f5f9' }} onClick={() => setShowHistory(false)}>Đóng</button>
-            </div>
+            <div style={{ marginTop: '2rem', textAlign: 'right' }}><button className="btn" style={{ background: '#f1f5f9' }} onClick={() => setShowHistory(false)}>Đóng</button></div>
           </div>
         </div>,
         document.body
