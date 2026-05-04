@@ -31,7 +31,7 @@ function Goods() {
     tags: '',
     image_url: '',
     quantity: '',
-    buyer: '',
+    buyer: localStorage.getItem('lastBuyer_goods') || '',
     recorder: 'của mình',
     is_low_stock: false
   });
@@ -125,6 +125,7 @@ function Goods() {
     };
 
     if (showModal === 'add_product') {
+      localStorage.setItem('lastBuyer_goods', formData.buyer || '');
       const { error } = await supabase.from('products').insert([productData]);
       if (!error) {
         setShowModal(null);
@@ -259,7 +260,7 @@ function Goods() {
   const filtered = getFilteredProducts();
 
   const resetForm = () => {
-    setFormData({ name: '', description: '', min_quantity: 5, tags: '', image_url: '', quantity: '', buyer: '', recorder: 'của mình', is_low_stock: false });
+    setFormData({ name: '', description: '', min_quantity: 5, tags: '', image_url: '', quantity: '', buyer: localStorage.getItem('lastBuyer_goods') || '', recorder: 'của mình', is_low_stock: false });
     setSelectedProduct(null);
     setImageFile(null);
     setImagePreview(null);
