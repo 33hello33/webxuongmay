@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabase';
-import { Plus, X, Truck, Clock, CheckCircle, Package, AlertCircle, Camera, Search, Trash2, Calendar } from 'lucide-react';
+import { Plus, X, Truck, Clock, CheckCircle, Package, AlertCircle, Camera, Search, Trash2, Calendar, Edit } from 'lucide-react';
 import { format } from 'date-fns';
 import { vi } from 'date-fns/locale';
 import { createPortal } from 'react-dom';
@@ -10,6 +10,7 @@ import { uploadImage } from '../lib/uploadHelper';
 const STATUS_LIST = [
   { id: 'tiếp nhận', label: 'Tiếp nhận', color: '#64748b', bg: '#f1f5f9' },
   { id: 'soạn hàng', label: 'Soạn hàng', color: '#0ea5e9', bg: '#f0f9ff' },
+  { id: 'cắt vải', label: 'Cắt vải', color: '#6366f1', bg: '#e0e7ff' },
   { id: 'lên chuyền', label: 'Lên chuyền', color: '#8b5cf6', bg: '#f5f3ff' },
   { id: 'kiểm hàng', label: 'Kiểm hàng', color: '#f59e0b', bg: '#fffbeb' },
   { id: 'hoàn thành', label: 'Hoàn thành', color: '#10b981', bg: '#ecfdf5' },
@@ -25,6 +26,7 @@ function Shipping() {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterDate, setFilterDate] = useState('');
   const [filterBuyer, setFilterBuyer] = useState('');
+  const [editingId, setEditingId] = useState(null);
   
   // Form state
   const [formData, setFormData] = useState({
@@ -89,11 +91,30 @@ function Shipping() {
     }
   };
 
-  const handleAddShipping = async (e) => {
+  const handleEdit = (item) => {
+    setEditingId(item.id);
+    setFormData({
+      product_name: item.product_name || '',
+      quantity: item.quantity || '',
+      buyer_id: item.buyer_id || '',
+      notes: item.notes || '',
+      image_url: item.image_url || ''
+    });
+    if (item.materials && item.materials.length > 0) {
+      setMaterialRows(item.materials.map(m => ({ product_id: m.product_id, qty: m.quantity })));
+    } else {
+      setMaterialRows([{ product_id: '', qty: '' }]);
+    }
+    setImageFile(null);
+    setImagePreview(item.image_url || null);
+    setShowModal(true);
+  };
+
+  const handleSaveShipping = async (e) => {
     e.preventDefault();
     setLoading(true);
 
-    let finalImageUrl = '';
+    let finalImageUrl = formData.image_url;
     if (imageFile) {
       const uploadedUrl = await uploadImage(imageFile);
       if (uploadedUrl) finalImageUrl = uploadedUrl;
@@ -109,19 +130,26 @@ function Shipping() {
       };
     });
 
-    const { error } = await supabase.from('transactions').insert([
-      {
-        product_name: formData.product_name,
-        type: 'shipping',
-        quantity: formData.quantity,
-        buyer_id: formData.buyer_id || null,
-        notes: formData.notes,
-        image_url: finalImageUrl,
-        materials: materialsData,
-        status: 'tiếp nhận',
-        date: new Date().toISOString()
-      }
-    ]);
+    const payload = {
+      product_name: formData.product_name,
+      type: 'shipping',
+      quantity: formData.quantity,
+      buyer_id: formData.buyer_id || null,
+      notes: formData.notes,
+      image_url: finalImageUrl,
+      materials: materialsData,
+    };
+
+    let error;
+    if (editingId) {
+      const res = await supabase.from('transactions').update(payload).eq('id', editingId);
+      error = res.error;
+    } else {
+      payload.status = 'tiếp nhận';
+      payload.date = new Date().toISOString();
+      const res = await supabase.from('transactions').insert([payload]);
+      error = res.error;
+    }
 
     if (!error) {
       setShowModal(false);
@@ -154,6 +182,7 @@ function Shipping() {
   };
 
   const resetForm = () => {
+    setEditingId(null);
     setFormData({ product_name: '', quantity: '', buyer_id: '', notes: '', image_url: '' });
     setMaterialRows([{ product_id: '', qty: '' }]);
     setMaterialSearch('');
@@ -314,13 +343,22 @@ function Shipping() {
                           <option key={st.id} value={st.id}>{st.label}</option>
                         ))}
                       </select>
-                      <button 
-                        onClick={() => handleDelete(s.id)}
-                        className="btn"
-                        style={{ padding: '4px 8px', background: '#fff1f2', color: '#e11d48', border: '1px solid #fee2e2', fontSize: '0.75rem' }}
-                      >
-                        <Trash2 size={14} /> Xóa
-                      </button>
+                      <div style={{ display: 'flex', gap: '8px' }}>
+                        <button 
+                          onClick={() => handleEdit(s)}
+                          className="btn"
+                          style={{ padding: '4px 8px', background: '#eff6ff', color: '#3b82f6', border: '1px solid #bfdbfe', fontSize: '0.75rem' }}
+                        >
+                          <Edit size={14} /> Sửa
+                        </button>
+                        <button 
+                          onClick={() => handleDelete(s.id)}
+                          className="btn"
+                          style={{ padding: '4px 8px', background: '#fff1f2', color: '#e11d48', border: '1px solid #fee2e2', fontSize: '0.75rem' }}
+                        >
+                          <Trash2 size={14} /> Xóa
+                        </button>
+                      </div>
                     </div>
                   </td>
                 </tr>
@@ -402,6 +440,12 @@ function Shipping() {
                     ))}
                   </select>
                   <button 
+                    onClick={() => handleEdit(s)}
+                    style={{ background: '#eff6ff', border: '1px solid #bfdbfe', color: '#3b82f6', padding: '4px 10px', borderRadius: '6px' }}
+                  >
+                    <Edit size={16} />
+                  </button>
+                  <button 
                     onClick={() => handleDelete(s.id)}
                     style={{ background: '#fff1f2', border: '1px solid #fee2e2', color: '#e11d48', padding: '4px 10px', borderRadius: '6px' }}
                   >
@@ -426,9 +470,9 @@ function Shipping() {
             <button className="modal-close" onClick={() => setShowModal(false)}>
               <X size={20} />
             </button>
-            <h2 style={{ marginBottom: '1.5rem' }}>Tạo đơn gửi sản phẩm hoàn chỉnh</h2>
+            <h2 style={{ marginBottom: '1.5rem' }}>{editingId ? 'Sửa thông tin hàng gửi' : 'Tạo đơn gửi sản phẩm hoàn chỉnh'}</h2>
             
-            <form onSubmit={handleAddShipping}>
+            <form onSubmit={handleSaveShipping}>
               <div style={{ display: 'grid', gridTemplateColumns: '140px 1fr', gap: '1.5rem', marginBottom: '1rem' }}>
                 {/* Cột trái: Hình ảnh */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
@@ -560,7 +604,7 @@ function Shipping() {
 
               <div style={{ marginTop: '1.25rem', display: 'flex', gap: '10px' }}>
                 <button type="button" className="btn" style={{ flex: 1, background: '#f1f5f9' }} onClick={() => setShowModal(false)}>Hủy</button>
-                <button type="submit" className="btn btn-primary" style={{ flex: 2 }} disabled={loading}>{loading ? 'Đang xử lý...' : 'Xác nhận tạo vận đơn'}</button>
+                <button type="submit" className="btn btn-primary" style={{ flex: 2 }} disabled={loading}>{loading ? 'Đang xử lý...' : (editingId ? 'Lưu thay đổi' : 'Xác nhận tạo vận đơn')}</button>
               </div>
             </form>
           </div>
