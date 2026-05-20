@@ -22,9 +22,21 @@ export const compressImage = async (file, maxSizeKB = 100) => {
         let width = img.width;
         let height = img.height;
 
+        // Cap initial dimensions to a reasonable max size (e.g., 1280px)
+        const MAX_DIMENSION = 1280;
+        if (width > MAX_DIMENSION || height > MAX_DIMENSION) {
+          if (width > height) {
+            height = Math.round((height * MAX_DIMENSION) / width);
+            width = MAX_DIMENSION;
+          } else {
+            width = Math.round((width * MAX_DIMENSION) / height);
+            height = MAX_DIMENSION;
+          }
+        }
+
         // Initial settings
         let quality = 0.8;
-        let scale = 0.9;
+        let scale = 0.85;
 
         const attemptCompression = () => {
           canvas.width = width;
@@ -38,19 +50,32 @@ export const compressImage = async (file, maxSizeKB = 100) => {
               return;
             }
 
-            if (blob.size <= maxSizeBytes || quality <= 0.1) {
+            // Stop if under limit or dimensions are ridiculously small
+            if (blob.size <= maxSizeBytes || (width < 200 && height < 200)) {
+              let newFileName = file.name;
+              const dotIndex = newFileName.lastIndexOf('.');
+              if (dotIndex !== -1) {
+                newFileName = newFileName.substring(0, dotIndex) + '.jpg';
+              } else {
+                newFileName += '.jpg';
+              }
+              
               // Create a new File object from the blob
-              const compressedFile = new File([blob], file.name, {
+              const compressedFile = new File([blob], newFileName, {
                 type: 'image/jpeg',
                 lastModified: Date.now(),
               });
               resolve(compressedFile);
             } else {
-              // Further compress: reduce quality and/or scale
-              quality -= 0.1;
-              if (quality < 0.3) {
-                width *= scale;
-                height *= scale;
+              // Further compress: reduce quality or scale
+              if (quality > 0.5) {
+                quality -= 0.1;
+              } else {
+                width = Math.floor(width * scale);
+                height = Math.floor(height * scale);
+                if (quality > 0.3) {
+                  quality -= 0.05;
+                }
               }
               attemptCompression();
             }

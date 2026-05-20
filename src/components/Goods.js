@@ -7,6 +7,10 @@ import { createPortal } from 'react-dom';
 import { uploadImage } from '../lib/uploadHelper';
 
 function Goods() {
+  const sessionData = localStorage.getItem('app_session');
+  const currentUser = sessionData ? JSON.parse(sessionData).user : null;
+  const isEmployee = currentUser?.role?.toLowerCase() === 'nhân viên';
+
   const [products, setProducts] = useState([]);
   const [customers, setCustomers] = useState([]);
   const [transactions, setTransactions] = useState([]);
@@ -266,6 +270,28 @@ function Goods() {
     setImagePreview(null);
   };
 
+  const popularTags = React.useMemo(() => {
+    const tagCount = {};
+    products.forEach(p => {
+      if (p.tags && Array.isArray(p.tags)) {
+        p.tags.forEach(tag => {
+          if (tag) {
+            const t = tag.trim();
+            tagCount[t] = (tagCount[t] || 0) + 1;
+          }
+        });
+      }
+    });
+    return Object.entries(tagCount)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 10)
+      .map(entry => entry[0]);
+  }, [products]);
+
+  const uniqueBuyers = React.useMemo(() => {
+    return [...new Set(products.map(p => p.buyer?.toLowerCase().trim()).filter(Boolean))].sort();
+  }, [products]);
+
   return (
     <div className="fade-in">
       <div className="goods-header-mobile" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
@@ -395,7 +421,9 @@ function Goods() {
                     <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
                       <button className="btn" style={{ padding: '6px 10px', background: '#ecfdf5', color: '#059669', fontSize: '0.75rem' }} onClick={() => { setSelectedProduct(p); setShowModal('import'); }}>Nhập</button>
                       <button className="btn" style={{ padding: '6px 10px', background: '#fff1f2', color: '#e11d48', fontSize: '0.75rem' }} onClick={() => { setSelectedProduct(p); setShowModal('export'); }}>Xuất</button>
-                      <button className="btn" style={{ padding: '6px', background: '#f8fafc', border: '1px solid var(--border)' }} onClick={() => handleEdit(p)} title="Sửa">Sửa</button>
+                      {!isEmployee && (
+                        <button className="btn" style={{ padding: '6px', background: '#f8fafc', border: '1px solid var(--border)' }} onClick={() => handleEdit(p)} title="Sửa">Sửa</button>
+                      )}
                       <button className="btn" style={{ padding: '6px', background: '#f1f5f9', border: '1px solid var(--border)' }} onClick={() => handleShowHistory(p)} title="Lịch sử"><History size={16} /></button>
                       <button className="btn" style={{ padding: '6px 10px', background: p.is_low_stock ? '#fee2e2' : '#fffbeb', color: p.is_low_stock ? '#ef4444' : '#92400e', fontSize: '0.75rem' }} onClick={() => handleToggleLowStock(p)}>{p.is_low_stock ? 'Đã nhập' : 'Báo hết'}</button>
                     </div>
@@ -438,7 +466,9 @@ function Goods() {
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
                   <button className="btn" style={{ flex: 1, padding: '8px', background: '#ecfdf5', color: '#059669', fontSize: '0.75rem' }} onClick={() => { setSelectedProduct(p); setShowModal('import'); }}>Nhập</button>
                   <button className="btn" style={{ flex: 1, padding: '8px', background: '#fff1f2', color: '#e11d48', fontSize: '0.75rem' }} onClick={() => { setSelectedProduct(p); setShowModal('export'); }}>Xuất</button>
-                  <button className="btn" style={{ flex: 1, padding: '8px', background: '#f1f5f9', color: 'var(--text-main)', fontSize: '0.75rem' }} onClick={() => handleEdit(p)}>Sửa</button>
+                  {!isEmployee && (
+                    <button className="btn" style={{ flex: 1, padding: '8px', background: '#f1f5f9', color: 'var(--text-main)', fontSize: '0.75rem' }} onClick={() => handleEdit(p)}>Sửa</button>
+                  )}
                   <button className="btn" style={{ flex: 1, padding: '8px', background: '#f1f5f9', color: 'var(--text-main)', fontSize: '0.75rem' }} onClick={() => handleShowHistory(p)}>Lịch sử</button>
                   <button className="btn" style={{ flex: 1, padding: '8px', background: p.is_low_stock ? '#fee2e2' : '#fffbeb', color: p.is_low_stock ? '#ef4444' : '#92400e', fontSize: '0.75rem' }} onClick={() => handleToggleLowStock(p)}>{p.is_low_stock ? 'Đã nhập' : 'Hết'}</button>
                 </div>
@@ -537,10 +567,55 @@ function Goods() {
                           <label htmlFor="is_low_stock" style={{ margin: 0, fontSize: '0.8125rem', fontWeight: '500', cursor: 'pointer' }}>Đánh dấu là sắp hết hàng</label>
                         </div>
                       </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><label style={{ margin: 0, whiteSpace: 'nowrap', flexShrink: 0 }}>Người mua:</label><input placeholder="Người mua / Nguồn hàng..." value={formData.buyer} onChange={e => setFormData({ ...formData, buyer: e.target.value })} style={{ padding: '4px 8px' }} /></div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <label style={{ margin: 0, whiteSpace: 'nowrap', flexShrink: 0 }}>Người mua:</label>
+                        <select
+                          value={formData.buyer}
+                          onChange={e => setFormData({ ...formData, buyer: e.target.value })}
+                          style={{ padding: '4px 8px', flex: 1, border: '1px solid var(--border)', borderRadius: '4px' }}
+                        >
+                          <option value="">Chọn người mua...</option>
+                          {uniqueBuyers.map(buyer => (
+                            <option key={buyer} value={buyer}>{buyer}</option>
+                          ))}
+                        </select>
+                      </div>
                     </div>
                   </div>
-                  <div><label>Tags (cách nhau bởi dấu phẩy)</label><input placeholder="Vải, Cotton, Mùa hè..." value={formData.tags} onChange={e => setFormData({ ...formData, tags: e.target.value })} /></div>
+                  <div>
+                    <label>Tags (cách nhau bởi dấu phẩy)</label>
+                    <input placeholder="Vải, Cotton, Mùa hè..." value={formData.tags} onChange={e => setFormData({ ...formData, tags: e.target.value })} />
+                    {popularTags.length > 0 && (
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '8px' }}>
+                        {popularTags.map(tag => (
+                          <button
+                            key={tag}
+                            type="button"
+                            onClick={() => {
+                              const currentTags = formData.tags.split(',').map(t => t.trim()).filter(Boolean);
+                              if (!currentTags.includes(tag)) {
+                                setFormData({
+                                  ...formData,
+                                  tags: currentTags.length > 0 ? `${currentTags.join(', ')}, ${tag}` : tag
+                                });
+                              }
+                            }}
+                            style={{
+                              padding: '2px 8px',
+                              fontSize: '0.7rem',
+                              borderRadius: '12px',
+                              border: '1px solid var(--border)',
+                              background: '#f8fafc',
+                              color: 'var(--text-muted)',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            + {tag}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                   <div><label>Mô tả chi tiết</label><textarea value={formData.description} rows="2" onChange={e => setFormData({ ...formData, description: e.target.value })} style={{ height: '60px' }} /></div>
                 </div>
               ) : (

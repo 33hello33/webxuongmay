@@ -4,7 +4,6 @@ import Overview from './components/Overview';
 import Goods from './components/Goods';
 import Customers from './components/Customers';
 import Shipping from './components/Shipping';
-import Config from './components/Config';
 import Expenses from './components/Expenses';
 import DefectiveGoods from './components/DefectiveGoods';
 import BaTam from './components/BaTam';
@@ -80,7 +79,6 @@ function App() {
       case 'defective': return <DefectiveGoods />;
       case 'batam': return <BaTam />;
       case 'expenses': return <Expenses />;
-      case 'config': return <Config />;
       default: return <Overview />;
     }
   };
@@ -167,17 +165,6 @@ function App() {
             </>
           )}
 
-          {user.role === 'Quản lý' && (
-            <button
-              className={`tab-btn ${activeTab === 'config' ? 'active' : ''}`}
-              onClick={() => setActiveTab('config')}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <Settings size={18} />
-                <span>Cấu hình</span>
-              </div>
-            </button>
-          )}
         </nav>
 
         <div className="header-actions">
