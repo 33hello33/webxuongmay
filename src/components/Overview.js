@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabase';
 import { Search, AlertTriangle, Package, ExternalLink, Tag, Truck, Box, X } from 'lucide-react';
 import { createPortal } from 'react-dom';
@@ -19,7 +19,7 @@ function Overview() {
   const [loading, setLoading] = useState(true);
   const [shippingCount, setShippingCount] = useState(0);
   const [activeShippings, setActiveShippings] = useState([]);
-  
+
   const [showModal, setShowModal] = useState(null);
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [formData, setFormData] = useState({ quantity: '', recorder: 'của mình' });
@@ -51,7 +51,7 @@ function Overview() {
     if (shippingData) {
       setShippingCount(shippingData.length);
       // Filter for specific in-progress statuses
-      const inProgress = ['tiếp nhận', 'soạn hàng', 'lên chuyền', 'kiểm hàng'];
+      const inProgress = ['tiếp nhận', 'soạn hàng', 'cắt vải', 'lên chuyền', 'kiểm hàng'];
       setActiveShippings(shippingData.filter(s => inProgress.includes(s.status)));
     }
 
@@ -119,7 +119,7 @@ function Overview() {
   const handleTransaction = async (e) => {
     e.preventDefault();
     setIsProcessing(true);
-    const type = showModal; 
+    const type = showModal;
     const qtyText = formData.quantity;
     const prevQty = selectedProduct?.quantity || "";
     const newQty = smartUpdateQuantity(prevQty, qtyText, type === 'import');
@@ -343,7 +343,7 @@ function Overview() {
                   </div>
                 </div>
               </div>
-              
+
               <div style={{ marginTop: '2rem', display: 'flex', gap: '10px' }}>
                 <button type="button" className="btn" style={{ flex: 1, background: '#f1f5f9' }} onClick={() => setShowModal(null)}>Hủy</button>
                 <button type="submit" className="btn btn-primary" style={{ flex: 2 }} disabled={isProcessing}>{isProcessing ? 'Đang xử lý...' : 'Xác nhận'}</button>
