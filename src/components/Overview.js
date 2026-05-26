@@ -1,6 +1,6 @@
 ﻿import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabase';
-import { Search, AlertTriangle, Package, ExternalLink, Tag, Truck, Box, X } from 'lucide-react';
+import { AlertTriangle, Package, Tag, Truck, X } from 'lucide-react';
 import { createPortal } from 'react-dom';
 const STATUS_LIST = [
   { id: 'tiếp nhận', label: 'Tiếp nhận', color: '#64748b', bg: '#f1f5f9' },
@@ -14,11 +14,12 @@ const STATUS_LIST = [
 
 function Overview() {
   const [products, setProducts] = useState([]);
+  const [customers, setCustomers] = useState([]);
   const [lowStock, setLowStock] = useState([]);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [loading, setLoading] = useState(true);
   const [shippingCount, setShippingCount] = useState(0);
   const [activeShippings, setActiveShippings] = useState([]);
+  const [shippingCustomerFilter, setShippingCustomerFilter] = useState('');
+  const [shippingStatusFilter, setShippingStatusFilter] = useState('');
 
   const [showModal, setShowModal] = useState(null);
   const [selectedProduct, setSelectedProduct] = useState(null);
@@ -30,32 +31,39 @@ function Overview() {
   }, []);
 
   const fetchData = async () => {
-    setLoading(true);
-    const { data } = await supabase
-      .from('products')
-      .select('*')
-      .order('created_at', { ascending: false });
+    const [
+      { data: productData },
+      { data: customerData },
+      { data: shippingData }
+    ] = await Promise.all([
+      supabase
+        .from('products')
+        .select('*')
+        .order('created_at', { ascending: false }),
+      supabase
+        .from('customers')
+        .select('*')
+        .order('name'),
+      supabase
+        .from('transactions')
+        .select('*, customers(name)')
+        .eq('type', 'shipping')
+        .neq('status', 'đã gửi')
+    ]);
 
-    if (data) {
-      setProducts(data);
-      setLowStock(data.filter(p => p.is_low_stock));
+    if (productData) {
+      setProducts(productData);
+      setLowStock(productData.filter(p => p.is_low_stock));
     }
 
-    // Fetch active shipping count & list
-    const { data: shippingData } = await supabase
-      .from('transactions')
-      .select('*')
-      .eq('type', 'shipping')
-      .neq('status', 'đã gửi');
+    if (customerData) {
+      setCustomers(customerData);
+    }
 
     if (shippingData) {
       setShippingCount(shippingData.length);
-      // Filter for specific in-progress statuses
-      const inProgress = ['tiếp nhận', 'soạn hàng', 'cắt vải', 'lên chuyền', 'kiểm hàng'];
-      setActiveShippings(shippingData.filter(s => inProgress.includes(s.status)));
+      setActiveShippings(shippingData);
     }
-
-    setLoading(false);
   };
 
   const handleUpdateStatus = async (id, newStatus) => {
@@ -146,26 +154,18 @@ function Overview() {
     setIsProcessing(false);
   };
 
-  const getFilteredProducts = () => {
-    if (!searchQuery.trim()) return products;
-    const searchTerms = searchQuery.toLowerCase().split(/[\s,]+/).filter(t => t.length > 0);
+  const shippingStatusOptions = STATUS_LIST.filter(status => status.id !== 'đã gửi');
+  const filteredActiveShippings = activeShippings.filter((shipping) => {
+    if (shippingCustomerFilter && shipping.buyer_id?.toString() !== shippingCustomerFilter) {
+      return false;
+    }
 
-    return products.filter(product => {
-      const productTags = (product.tags || []).map(t => t.toLowerCase());
-      const buyer = (product.buyer || '').toLowerCase();
-      const description = (product.description || '').toLowerCase();
-      const name = (product.name || '').toLowerCase();
+    if (shippingStatusFilter && shipping.status !== shippingStatusFilter) {
+      return false;
+    }
 
-      return searchTerms.every(term =>
-        productTags.some(tag => tag.includes(term)) ||
-        buyer.includes(term) ||
-        description.includes(term) ||
-        name.includes(term)
-      );
-    });
-  };
-
-  const filtered = getFilteredProducts();
+    return true;
+  });
 
   return (
     <div className="fade-in">
@@ -258,8 +258,42 @@ function Overview() {
             <Truck size={24} /> Danh sách hàng đang xử lý (Gửi)
           </h2>
 
+          <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginBottom: '1rem' }}>
+            <div className="card" style={{ padding: '0.5rem 1rem', display: 'flex', alignItems: 'center', gap: '10px', flex: '1 1 240px', minHeight: '45px', margin: 0 }}>
+              <select
+                value={shippingCustomerFilter}
+                onChange={(e) => setShippingCustomerFilter(e.target.value)}
+                style={{ border: 'none', background: 'transparent', color: 'var(--text-main)', outline: 'none', cursor: 'pointer', width: '100%', padding: 0 }}
+              >
+                <option value="">Lọc khách hàng</option>
+                {customers.map(customer => (
+                  <option key={customer.id} value={customer.id}>{customer.name}</option>
+                ))}
+              </select>
+              {shippingCustomerFilter && (
+                <X size={16} onClick={() => setShippingCustomerFilter('')} style={{ cursor: 'pointer', color: '#ef4444' }} />
+              )}
+            </div>
+
+            <div className="card" style={{ padding: '0.5rem 1rem', display: 'flex', alignItems: 'center', gap: '10px', flex: '1 1 220px', minHeight: '45px', margin: 0 }}>
+              <select
+                value={shippingStatusFilter}
+                onChange={(e) => setShippingStatusFilter(e.target.value)}
+                style={{ border: 'none', background: 'transparent', color: 'var(--text-main)', outline: 'none', cursor: 'pointer', width: '100%', padding: 0 }}
+              >
+                <option value="">Lọc trạng thái</option>
+                {shippingStatusOptions.map(status => (
+                  <option key={status.id} value={status.id}>{status.label}</option>
+                ))}
+              </select>
+              {shippingStatusFilter && (
+                <X size={16} onClick={() => setShippingStatusFilter('')} style={{ cursor: 'pointer', color: '#ef4444' }} />
+              )}
+            </div>
+          </div>
+
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '1rem' }}>
-            {activeShippings.map(s => (
+            {filteredActiveShippings.map(s => (
               <div key={`ship-${s.id}`} className="card" style={{ border: '1px solid #ddd6fe', background: '#fcfaff' }}>
                 <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
                   <div style={{ width: '100px', height: '100px', background: '#f5f3ff', borderRadius: '12px', overflow: 'hidden', flexShrink: 0 }}>
@@ -272,6 +306,9 @@ function Overview() {
                   </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontWeight: '700', fontSize: '1rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{s.product_name}</div>
+                    <div style={{ fontSize: '0.8125rem', color: 'var(--text-muted)', marginTop: '4px' }}>
+                      {s.customers?.name || '—'}
+                    </div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '8px', flexWrap: 'wrap', gap: '4px' }}>
                       {(() => {
                         const currentStatus = STATUS_LIST.find(st => st.id === s.status) || STATUS_LIST[0];
@@ -314,6 +351,12 @@ function Overview() {
               </div>
             ))}
           </div>
+
+          {filteredActiveShippings.length === 0 && (
+            <div className="card" style={{ marginTop: '1rem', textAlign: 'center', color: 'var(--text-muted)' }}>
+              Không có hàng gửi phù hợp với bộ lọc hiện tại.
+            </div>
+          )}
         </section>
       )}
 

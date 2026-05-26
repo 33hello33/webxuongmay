@@ -17,6 +17,18 @@ const STATUS_LIST = [
   { id: 'đã gửi', label: 'Đã gửi', color: '#d946ef', bg: '#fdf4ff' }
 ];
 
+const toLocalDbTimestamp = () => {
+  const now = new Date();
+  const offsetMs = now.getTimezoneOffset() * 60000;
+  return new Date(now - offsetMs).toISOString().slice(0, 19);
+};
+
+const parseDbTimestamp = (value) => {
+  if (!value) return null;
+  const parsed = new Date(typeof value === 'string' ? value.replace(' ', 'T') : value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+};
+
 function Shipping() {
   const [shippings, setShippings] = useState([]);
   const [products, setProducts] = useState([]);
@@ -27,7 +39,7 @@ function Shipping() {
   const [filterDate, setFilterDate] = useState('');
   const [filterBuyer, setFilterBuyer] = useState('');
   const [editingId, setEditingId] = useState(null);
-  
+
   // Form state
   const [formData, setFormData] = useState({
     product_name: '',
@@ -52,6 +64,7 @@ function Shipping() {
       .from('transactions')
       .select('*, customers(name)')
       .eq('type', 'shipping')
+      .order('edit', { ascending: false, nullsFirst: false })
       .order('date', { ascending: false });
     if (data) setShippings(data);
   };
@@ -146,7 +159,7 @@ function Shipping() {
       error = res.error;
     } else {
       payload.status = 'tiếp nhận';
-      payload.date = new Date().toISOString();
+      payload.date = toLocalDbTimestamp();
       const res = await supabase.from('transactions').insert([payload]);
       error = res.error;
     }
@@ -162,9 +175,10 @@ function Shipping() {
   };
 
   const handleUpdateStatus = async (id, newStatus) => {
+    const editedAt = toLocalDbTimestamp();
     const { error } = await supabase
       .from('transactions')
-      .update({ status: newStatus })
+      .update({ status: newStatus, edit: editedAt })
       .eq('id', id);
 
     if (!error) {
@@ -204,7 +218,7 @@ function Shipping() {
     // 3. Robust Search Query
     if (!searchQuery.trim()) return true;
     const searchTerms = searchQuery.toLowerCase().split(/[\s,]+/).filter(t => t.length > 0);
-    
+
     const customerName = (s.customers?.name || '').toLowerCase();
     const productName = (s.product_name || '').toLowerCase();
     const notes = (s.notes || '').toLowerCase();
@@ -214,7 +228,7 @@ function Shipping() {
       return prod ? (prod.tags || []) : [];
     }).map(t => t.toLowerCase());
 
-    return searchTerms.every(term => 
+    return searchTerms.every(term =>
       customerName.includes(term) ||
       productName.includes(term) ||
       notes.includes(term) ||
@@ -222,6 +236,12 @@ function Shipping() {
       materialTags.some(mt => mt.includes(term))
     );
   });
+
+  const formatEditDate = (value) => {
+    const parsed = parseDbTimestamp(value);
+    if (!parsed) return '-';
+    return format(parsed, 'dd/MM/yyyy HH:mm', { locale: vi });
+  };
 
   return (
     <div className="fade-in">
@@ -247,7 +267,7 @@ function Shipping() {
           />
           {searchQuery && <X size={16} onClick={() => setSearchQuery('')} style={{ cursor: 'pointer', color: 'var(--text-muted)' }} />}
         </div>
-        
+
         <div style={{ display: 'flex', gap: '10px', flex: '1 1 300px', maxWidth: '450px' }}>
           <div className="card" style={{ padding: '0.5rem 1rem', display: 'flex', alignItems: 'center', gap: '10px', flex: 1, margin: 0, height: '45px' }}>
             <select
@@ -262,7 +282,7 @@ function Shipping() {
             </select>
             {filterBuyer && <X size={16} onClick={() => setFilterBuyer('')} style={{ cursor: 'pointer', color: '#ef4444' }} />}
           </div>
-          
+
           <div className="card" style={{ padding: '0.5rem 1rem', display: 'flex', alignItems: 'center', gap: '10px', flex: 1, margin: 0, height: '45px', cursor: 'pointer' }}>
             <Calendar size={20} color="var(--text-muted)" />
             <input
@@ -282,7 +302,7 @@ function Shipping() {
             <tr>
               <th style={{ textAlign: 'left', padding: '1rem', color: 'var(--text-muted)', fontSize: '0.75rem', textTransform: 'uppercase' }}>ID</th>
               <th style={{ textAlign: 'left', padding: '1rem', color: 'var(--text-muted)', fontSize: '0.75rem', textTransform: 'uppercase' }}>Sản phẩm / Vận đơn</th>
-              <th style={{ textAlign: 'left', padding: '1rem', color: 'var(--text-muted)', fontSize: '0.75rem', textTransform: 'uppercase' }}>Nguyên liệu sử dụng</th>
+              <th style={{ textAlign: 'left', padding: '1rem', color: 'var(--text-muted)', fontSize: '0.75rem', textTransform: 'uppercase' }}>Ngày chỉnh sửa</th>
               <th style={{ textAlign: 'center', padding: '1rem', color: 'var(--text-muted)', fontSize: '0.75rem', textTransform: 'uppercase' }}>Số lượng gửi</th>
               <th style={{ textAlign: 'left', padding: '1rem', color: 'var(--text-muted)', fontSize: '0.75rem', textTransform: 'uppercase' }}>Khách hàng</th>
               <th style={{ textAlign: 'center', padding: '1rem', color: 'var(--text-muted)', fontSize: '0.75rem', textTransform: 'uppercase' }}>Trạng thái</th>
@@ -299,11 +319,11 @@ function Shipping() {
                     <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                       <div style={{ width: '100px', height: '100px', background: '#f1f5f9', borderRadius: '12px', overflow: 'hidden', flexShrink: 0 }}>
                         {s.image_url && (
-                          <img 
-                            src={s.image_url} 
-                            alt="" 
+                          <img
+                            src={s.image_url}
+                            alt=""
                             referrerPolicy="no-referrer"
-                            style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
+                            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                           />
                         )}
                       </div>
@@ -316,15 +336,7 @@ function Shipping() {
                       </div>
                     </div>
                   </td>
-                  <td style={{ padding: '1rem', fontSize: '0.875rem' }}>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                      {(s.materials || []).map((m, idx) => (
-                        <div key={idx} style={{ background: '#f8fafc', padding: '2px 8px', borderRadius: '4px', border: '1px solid #e2e8f0' }}>
-                          <span style={{ fontWeight: '600' }}>{m.product_name}</span>: {m.quantity}
-                        </div>
-                      ))}
-                    </div>
-                  </td>
+                  <td style={{ padding: '1rem', fontSize: '0.875rem', color: 'var(--text-muted)' }}>{formatEditDate(s.edit)}</td>
                   <td style={{ padding: '1rem', textAlign: 'center', fontWeight: '800', color: 'var(--primary)' }}>{s.quantity}</td>
                   <td style={{ padding: '1rem' }}>{s.customers?.name || '—'}</td>
                   <td style={{ padding: '1rem', textAlign: 'center' }}>
@@ -334,8 +346,8 @@ function Shipping() {
                   </td>
                   <td style={{ padding: '1rem', textAlign: 'right' }}>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', alignItems: 'flex-end' }}>
-                      <select 
-                        value={s.status} 
+                      <select
+                        value={s.status}
                         onChange={(e) => handleUpdateStatus(s.id, e.target.value)}
                         style={{ padding: '4px 8px', fontSize: '0.875rem', borderRadius: '6px', border: '1px solid var(--border)' }}
                       >
@@ -344,14 +356,14 @@ function Shipping() {
                         ))}
                       </select>
                       <div style={{ display: 'flex', gap: '8px' }}>
-                        <button 
+                        <button
                           onClick={() => handleEdit(s)}
                           className="btn"
                           style={{ padding: '4px 8px', background: '#eff6ff', color: '#3b82f6', border: '1px solid #bfdbfe', fontSize: '0.75rem' }}
                         >
                           <Edit size={14} /> Sửa
                         </button>
-                        <button 
+                        <button
                           onClick={() => handleDelete(s.id)}
                           className="btn"
                           style={{ padding: '4px 8px', background: '#fff1f2', color: '#e11d48', border: '1px solid #fee2e2', fontSize: '0.75rem' }}
@@ -376,11 +388,11 @@ function Shipping() {
               <div style={{ display: 'flex', gap: '1rem', alignItems: 'flex-start' }}>
                 <div style={{ width: '70px', height: '70px', background: '#f1f5f9', borderRadius: '10px', overflow: 'hidden', flexShrink: 0 }}>
                   {s.image_url && (
-                    <img 
-                      src={s.image_url} 
-                      alt="" 
+                    <img
+                      src={s.image_url}
+                      alt=""
                       referrerPolicy="no-referrer"
-                      style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
+                      style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                     />
                   )}
                 </div>
@@ -430,22 +442,22 @@ function Shipping() {
                   {currentStatus.label}
                 </span>
                 <div style={{ display: 'flex', gap: '8px' }}>
-                  <select 
+                  <select
                     style={{ fontSize: '0.8125rem', padding: '4px 8px', borderRadius: '6px', border: '1px solid var(--border)', background: 'white' }}
-                    value={s.status} 
+                    value={s.status}
                     onChange={(e) => handleUpdateStatus(s.id, e.target.value)}
                   >
                     {STATUS_LIST.map(st => (
                       <option key={st.id} value={st.id}>{st.label}</option>
                     ))}
                   </select>
-                  <button 
+                  <button
                     onClick={() => handleEdit(s)}
                     style={{ background: '#eff6ff', border: '1px solid #bfdbfe', color: '#3b82f6', padding: '4px 10px', borderRadius: '6px' }}
                   >
                     <Edit size={16} />
                   </button>
-                  <button 
+                  <button
                     onClick={() => handleDelete(s.id)}
                     style={{ background: '#fff1f2', border: '1px solid #fee2e2', color: '#e11d48', padding: '4px 10px', borderRadius: '6px' }}
                   >
@@ -471,7 +483,7 @@ function Shipping() {
               <X size={20} />
             </button>
             <h2 style={{ marginBottom: '1.5rem' }}>{editingId ? 'Sửa thông tin hàng gửi' : 'Tạo đơn gửi sản phẩm hoàn chỉnh'}</h2>
-            
+
             <form onSubmit={handleSaveShipping}>
               <div style={{ display: 'grid', gridTemplateColumns: '140px 1fr', gap: '1.5rem', marginBottom: '1rem' }}>
                 {/* Cột trái: Hình ảnh */}
@@ -485,11 +497,11 @@ function Shipping() {
                     }}
                   >
                     {imagePreview ? (
-                      <img 
-                        src={imagePreview} 
-                        alt="" 
+                      <img
+                        src={imagePreview}
+                        alt=""
                         referrerPolicy="no-referrer"
-                        style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
+                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                       />
                     ) : (
                       <div style={{ textAlign: 'center' }}>
@@ -541,9 +553,9 @@ function Shipping() {
 
                 <div className="search-box" style={{ marginBottom: '0.75rem', background: 'white', border: '1px solid var(--border)', borderRadius: '8px', padding: '2px 10px', display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <Search size={14} color="var(--text-muted)" />
-                  <input 
-                    type="text" 
-                    placeholder="Tìm nhanh hàng theo tag..." 
+                  <input
+                    type="text"
+                    placeholder="Tìm nhanh hàng theo tag..."
                     value={materialSearch}
                     onChange={e => setMaterialSearch(e.target.value)}
                     style={{ border: 'none', background: 'transparent', padding: '4px 0', width: '100%', fontSize: '0.8125rem', outline: 'none' }}
@@ -554,13 +566,13 @@ function Shipping() {
                     </button>
                   )}
                 </div>
-                
+
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '150px', overflowY: 'auto', paddingRight: '4px' }}>
                   {materialRows.map((row, index) => (
                     <div key={index} style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-                      <select 
+                      <select
                         style={{ flex: 2, padding: '4px 8px' }}
-                        value={row.product_id} 
+                        value={row.product_id}
                         onChange={e => updateMaterialRow(index, 'product_id', e.target.value)}
                       >
                         <option value="">Chọn hàng hóa...</option>
@@ -568,11 +580,11 @@ function Shipping() {
                           .filter(p => {
                             if (!materialSearch.trim()) return true;
                             if (row.product_id?.toString() === p.id.toString()) return true;
-                            
+
                             const searchTerms = materialSearch.toLowerCase().split(/[\s,]+/).filter(t => t.length > 0);
                             const pTags = (p.tags || []).map(t => t.toLowerCase());
-                            
-                            return searchTerms.every(term => 
+
+                            return searchTerms.every(term =>
                               pTags.some(tag => tag.includes(term))
                             );
                           })
@@ -583,15 +595,15 @@ function Shipping() {
                           ))
                         }
                       </select>
-                      <input 
+                      <input
                         style={{ flex: 1, padding: '4px 8px' }}
-                        type="text" 
-                        placeholder="SL/ĐV" 
-                        value={row.qty} 
+                        type="text"
+                        placeholder="SL/ĐV"
+                        value={row.qty}
                         onChange={e => updateMaterialRow(index, 'qty', e.target.value)}
                       />
-                      <button 
-                        type="button" 
+                      <button
+                        type="button"
                         onClick={() => removeMaterialRow(index)}
                         style={{ padding: '4px', color: '#ef4444', background: 'transparent', border: 'none', cursor: 'pointer' }}
                       >
