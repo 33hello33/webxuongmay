@@ -12,6 +12,12 @@ const STATUS_LIST = [
   { id: 'đã gửi', label: 'Đã gửi', color: '#d946ef', bg: '#fdf4ff' }
 ];
 
+const toLocalDbTimestamp = () => {
+  const now = new Date();
+  const offsetMs = now.getTimezoneOffset() * 60000;
+  return new Date(now - offsetMs).toISOString().slice(0, 19);
+};
+
 function Overview() {
   const [products, setProducts] = useState([]);
   const [customers, setCustomers] = useState([]);
@@ -48,6 +54,8 @@ function Overview() {
         .from('transactions')
         .select('*, customers(name)')
         .eq('type', 'shipping')
+        .order('edit', { ascending: false, nullsFirst: false })
+        .order('date', { ascending: false })
         .neq('status', 'đã gửi')
     ]);
 
@@ -67,9 +75,10 @@ function Overview() {
   };
 
   const handleUpdateStatus = async (id, newStatus) => {
+    const editedAt = toLocalDbTimestamp();
     const { error } = await supabase
       .from('transactions')
-      .update({ status: newStatus })
+      .update({ status: newStatus, edit: editedAt })
       .eq('id', id);
 
     if (!error) {
