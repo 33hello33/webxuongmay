@@ -19,6 +19,9 @@ const DEFAULT_MONTHLY_DATA = {
   note: ''
 };
 
+const QUICK_HOUR_TAGS = [1, 2, 3];
+const QUICK_MINUTE_TAGS = [10, 20, 30, 40, 50];
+
 const parseNumber = (value, fallback = 0) => {
   if (value === null || value === undefined || value === '') return fallback;
   const normalized = Number.parseFloat(value);
@@ -66,6 +69,67 @@ const getCurrentSessionUser = () => {
   }
 };
 
+const extractDurationParts = (value) => {
+  const raw = String(value || '').trim();
+
+  if (!raw) {
+    return { sign: 1, hours: 0, minutes: 0 };
+  }
+
+  const sign = raw.startsWith('-') ? -1 : 1;
+  const normalized = raw.replace(/^-/, '');
+  const hourMatch = normalized.match(/(\d+(?:[.,]\d+)?)\s*giờ/i);
+  const minuteMatch = normalized.match(/(\d+(?:[.,]\d+)?)\s*phút/i);
+
+  if (!hourMatch && !minuteMatch && /^-?\d+(?:[.,]\d+)?$/.test(raw)) {
+    const numericHours = Math.abs(parseFloat(raw.replace(',', '.')));
+    const wholeHours = Math.floor(numericHours);
+    const remainingMinutes = Math.round((numericHours - wholeHours) * 60);
+    return { sign, hours: wholeHours, minutes: remainingMinutes };
+  }
+
+  return {
+    sign,
+    hours: hourMatch ? parseInt(hourMatch[1], 10) : 0,
+    minutes: minuteMatch ? parseInt(minuteMatch[1], 10) : 0
+  };
+};
+
+const buildDurationText = ({ sign = 1, hours = 0, minutes = 0 }) => {
+  const parts = [];
+
+  if (hours > 0) parts.push(`${hours} giờ`);
+  if (minutes > 0) parts.push(`${minutes} phút`);
+
+  if (parts.length === 0) return '';
+
+  const text = parts.join(' ');
+  return sign < 0 ? `-${text}` : text;
+};
+
+const toDecimalHoursFromText = (value) => {
+  const raw = String(value || '').trim();
+  if (!raw) return 0;
+
+  if (/^-?\d+(?:[.,]\d+)?$/.test(raw)) {
+    return parseFloat(raw.replace(',', '.'));
+  }
+
+  const { sign, hours, minutes } = extractDurationParts(raw);
+  return sign * (hours + minutes / 60);
+};
+
+const updateDurationText = (currentValue, type, amount) => {
+  const currentParts = extractDurationParts(currentValue);
+  const nextParts = {
+    sign: 1,
+    hours: type === 'hours' ? amount : currentParts.hours,
+    minutes: type === 'minutes' ? amount : currentParts.minutes
+  };
+
+  return buildDurationText(nextParts);
+};
+
 const getEffectiveMonthEnd = (monthValue) => {
   const today = new Date();
   const currentMonth = format(today, 'yyyy-MM');
@@ -83,10 +147,10 @@ const getEffectiveMonthEnd = (monthValue) => {
 
 const normalizeAttendanceRecord = (record) => {
   const isDayOff = Boolean(record?.isDayOff);
-  const adjustmentHours = isDayOff ? 0 : parseNumber(record?.adjustmentHours, 0);
-  const note = (record?.note || '').trim();
+  const adjustmentText = isDayOff ? '' : String(record?.adjustmentText || '').trim();
+  const note = String(record?.note || '').trim();
 
-  if (!isDayOff && adjustmentHours === 0 && !note) {
+  if (!isDayOff && !adjustmentText && !note) {
     return null;
   }
 
@@ -94,12 +158,12 @@ const normalizeAttendanceRecord = (record) => {
     employeeCode: String(record.employeeCode),
     date: record.date,
     isDayOff,
-    adjustmentHours,
+    adjustmentText,
     note
   };
 };
 
-const calculateDayHours = (isDayOff, adjustmentHours) => {
+const calculateDayHours = (isDayOff, adjustmentText) => {
   if (isDayOff) {
     return {
       regularHours: 0,
@@ -108,7 +172,7 @@ const calculateDayHours = (isDayOff, adjustmentHours) => {
     };
   }
 
-  const adjustment = parseNumber(adjustmentHours, 0);
+  const adjustment = toDecimalHoursFromText(adjustmentText);
   const regularHours = adjustment < 0 ? Math.max(DEFAULT_DAILY_HOURS + adjustment, 0) : DEFAULT_DAILY_HOURS;
   const overtimeHours = adjustment > 0 ? adjustment : 0;
 
@@ -140,7 +204,7 @@ const calculateEmployeeSummary = ({ employeeCode, monthDates, monthValue, attend
     const dateKey = format(date, 'yyyy-MM-dd');
     const record = attendanceMap[getAttendanceKey(employeeCode, dateKey)];
     const isDayOff = Boolean(record?.isDayOff);
-    const { regularHours: dailyRegular, overtimeHours: dailyOvertime } = calculateDayHours(isDayOff, record?.adjustmentHours);
+    const { regularHours: dailyRegular, overtimeHours: dailyOvertime } = calculateDayHours(isDayOff, record?.adjustmentText);
 
     if (isDayOff) {
       dayOffs += 1;
@@ -192,6 +256,15 @@ const rollbackMapEntry = (setState, key, hadPrevious, previousValue) => {
   });
 };
 
+const downloadDataUrl = (dataUrl, fileName) => {
+  const link = document.createElement('a');
+  link.href = dataUrl;
+  link.download = fileName;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+};
+
 function AttendancePayroll() {
   const currentUser = useMemo(() => getCurrentSessionUser(), []);
   const isManager = (currentUser?.role || '').toLowerCase() === 'quản lý';
@@ -202,14 +275,14 @@ function AttendancePayroll() {
   const [attendanceMap, setAttendanceMap] = useState({});
   const [monthlyMap, setMonthlyMap] = useState({});
   const [payrollConfig, setPayrollConfig] = useState(DEFAULT_CONFIG);
-  const [loading, setLoading] = useState(false);
+  const [, setLoading] = useState(false);
   const [savingConfig, setSavingConfig] = useState(false);
   const [savingQuick, setSavingQuick] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [quickEntry, setQuickEntry] = useState({
     employeeCode: '',
     date: format(new Date(), 'yyyy-MM-dd'),
-    overtimeHours: ''
+    overtimeText: ''
   });
 
   useEffect(() => {
@@ -261,6 +334,12 @@ function AttendancePayroll() {
   }, [currentUser?.manv, employees, quickEntry.employeeCode]);
 
   useEffect(() => {
+    if (!isManager && quickEntry.employeeCode && quickEntry.employeeCode !== selectedEmployeeCode) {
+      setSelectedEmployeeCode(quickEntry.employeeCode);
+    }
+  }, [isManager, quickEntry.employeeCode, selectedEmployeeCode]);
+
+  useEffect(() => {
     const fetchPayrollData = async () => {
       if (employees.length === 0) {
         setAttendanceMap({});
@@ -290,7 +369,7 @@ function AttendancePayroll() {
           .lte('work_date', monthEnd),
         supabase
           .from('employee_payroll_monthly')
-          .select('employee_manv, payroll_month, allowance, bonus, penalty, note')
+          .select('employee_manv, allowance, bonus, penalty, note')
           .in('employee_manv', employeeCodes)
           .eq('payroll_month', monthStart)
       ]);
@@ -316,7 +395,7 @@ function AttendancePayroll() {
           employeeCode: row.employee_manv,
           date: row.work_date,
           isDayOff: row.is_day_off,
-          adjustmentHours: row.adjustment_hours,
+          adjustmentText: row.adjustment_hours || '',
           note: row.note || ''
         });
 
@@ -393,7 +472,7 @@ function AttendancePayroll() {
       employeeCode: selectedEmployeeCode,
       date: dateKey,
       isDayOff: false,
-      adjustmentHours: 0,
+      adjustmentText: '',
       note: ''
     };
 
@@ -423,7 +502,7 @@ function AttendancePayroll() {
             employee_manv: selectedEmployeeCode,
             work_date: dateKey,
             is_day_off: nextRecord.isDayOff,
-            adjustment_hours: nextRecord.adjustmentHours,
+            adjustment_hours: nextRecord.adjustmentText || null,
             note: nextRecord.note || null
           }
         ],
@@ -537,7 +616,7 @@ function AttendancePayroll() {
         employeeCode: String(selectedEmployeeCode),
         date: dateKey,
         isDayOff: true,
-        adjustmentHours: 0,
+        adjustmentText: '',
         note: attendanceMap[recordKey]?.note || ''
       };
 
@@ -546,7 +625,7 @@ function AttendancePayroll() {
         employee_manv: selectedEmployeeCode,
         work_date: dateKey,
         is_day_off: true,
-        adjustment_hours: 0,
+        adjustment_hours: null,
         note: nextRecord.note || null
       });
     });
@@ -602,24 +681,28 @@ function AttendancePayroll() {
     }
   };
 
+  const handleQuickTagClick = (type, amount) => {
+    setQuickEntry((previous) => ({
+      ...previous,
+      overtimeText: updateDurationText(previous.overtimeText, type, amount)
+    }));
+  };
+
   const handleQuickAttendanceSave = async (event) => {
     event.preventDefault();
 
-    if (!quickEntry.employeeCode || !quickEntry.date) {
-      return;
-    }
+    if (!quickEntry.employeeCode || !quickEntry.date) return;
 
     setSavingQuick(true);
 
-    const adjustmentHours = parseNumber(quickEntry.overtimeHours, 0);
-    const monthOfQuickEntry = quickEntry.date.slice(0, 7);
     const recordKey = getAttendanceKey(quickEntry.employeeCode, quickEntry.date);
     const previousRecord = attendanceMap[recordKey];
+    const monthOfQuickEntry = quickEntry.date.slice(0, 7);
     const nextRecord = normalizeAttendanceRecord({
       employeeCode: quickEntry.employeeCode,
       date: quickEntry.date,
       isDayOff: false,
-      adjustmentHours,
+      adjustmentText: quickEntry.overtimeText,
       note: previousRecord?.note || ''
     });
 
@@ -644,7 +727,7 @@ function AttendancePayroll() {
             employee_manv: quickEntry.employeeCode,
             work_date: quickEntry.date,
             is_day_off: false,
-            adjustment_hours: adjustmentHours,
+            adjustment_hours: nextRecord.adjustmentText,
             note: nextRecord.note || null
           }
         ],
@@ -680,7 +763,7 @@ function AttendancePayroll() {
 
     setQuickEntry((previous) => ({
       ...previous,
-      overtimeHours: ''
+      overtimeText: ''
     }));
     setSavingQuick(false);
   };
@@ -840,56 +923,138 @@ function AttendancePayroll() {
     setTimeout(() => printWindow.print(), 300);
   };
 
+  const handleDownloadAttendanceImage = (employee) => {
+    const employeeCode = employee?.manv;
+    if (!employeeCode) return;
+
+    const canvas = document.createElement('canvas');
+    const columns = [
+      { key: 'date', label: 'Ngày', width: 160, align: 'left' },
+      { key: 'working', label: 'Đi làm', width: 120, align: 'center' },
+      { key: 'regular', label: 'Giờ công', width: 140, align: 'right' },
+      { key: 'adjustment', label: '+/- giờ', width: 220, align: 'left' },
+      { key: 'overtime', label: 'Tăng ca', width: 140, align: 'right' },
+      { key: 'total', label: 'Tổng giờ', width: 140, align: 'right' },
+      { key: 'note', label: 'Ghi chú', width: 360, align: 'left' }
+    ];
+
+    const rowHeight = 42;
+    const headerHeight = 46;
+    const titleHeight = 96;
+    const tableWidth = columns.reduce((sum, column) => sum + column.width, 0);
+    const canvasWidth = tableWidth + 48;
+    const canvasHeight = titleHeight + headerHeight + monthDates.length * rowHeight + 48;
+
+    canvas.width = canvasWidth;
+    canvas.height = canvasHeight;
+
+    const context = canvas.getContext('2d');
+    if (!context) return;
+
+    context.fillStyle = '#ffffff';
+    context.fillRect(0, 0, canvasWidth, canvasHeight);
+
+    context.fillStyle = '#0f172a';
+    context.font = '700 28px Arial';
+    context.fillText(`Bảng chấm công - ${employee.tennv || employee.username}`, 24, 38);
+    context.fillStyle = '#475569';
+    context.font = '16px Arial';
+    context.fillText(`Tháng ${selectedMonth} | Mặc định ${DEFAULT_DAILY_HOURS} giờ/ngày`, 24, 66);
+
+    const startX = 24;
+    let currentX = startX;
+    const tableTop = titleHeight;
+
+    columns.forEach((column) => {
+      context.fillStyle = '#f8fafc';
+      context.fillRect(currentX, tableTop, column.width, headerHeight);
+      context.strokeStyle = '#cbd5e1';
+      context.strokeRect(currentX, tableTop, column.width, headerHeight);
+      context.fillStyle = '#0f172a';
+      context.font = '700 15px Arial';
+
+      const textX =
+        column.align === 'center'
+          ? currentX + column.width / 2
+          : column.align === 'right'
+            ? currentX + column.width - 12
+            : currentX + 12;
+
+      context.textAlign = column.align === 'center' ? 'center' : column.align === 'right' ? 'right' : 'left';
+      context.textBaseline = 'middle';
+      context.fillText(column.label, textX, tableTop + headerHeight / 2);
+      currentX += column.width;
+    });
+
+    monthDates.forEach((date, index) => {
+      const dateKey = format(date, 'yyyy-MM-dd');
+      const record = attendanceMap[getAttendanceKey(employeeCode, dateKey)];
+      const isDayOff = Boolean(record?.isDayOff);
+      const adjustmentText = record?.adjustmentText || '';
+      const { regularHours, overtimeHours, totalHours } = calculateDayHours(isDayOff, adjustmentText);
+      const rowTop = tableTop + headerHeight + index * rowHeight;
+      const isStriped = index % 2 === 0;
+
+      context.fillStyle = isStriped ? '#ffffff' : '#fbfdff';
+      context.fillRect(startX, rowTop, tableWidth, rowHeight);
+
+      currentX = startX;
+      const rowValues = {
+        date: `${format(date, 'dd/MM/yyyy')} - ${format(date, 'EEE', { locale: vi })}`,
+        working: isDayOff ? 'Nghỉ' : 'Đi làm',
+        regular: `${formatHourValue(regularHours)}h`,
+        adjustment: adjustmentText || '-',
+        overtime: `${formatHourValue(overtimeHours)}h`,
+        total: `${formatHourValue(totalHours)}h`,
+        note: record?.note || '-'
+      };
+
+      columns.forEach((column) => {
+        context.strokeStyle = '#e2e8f0';
+        context.strokeRect(currentX, rowTop, column.width, rowHeight);
+        context.fillStyle = column.key === 'overtime' ? '#c2410c' : '#0f172a';
+        context.font = '14px Arial';
+
+        const textX =
+          column.align === 'center'
+            ? currentX + column.width / 2
+            : column.align === 'right'
+              ? currentX + column.width - 12
+              : currentX + 12;
+
+        context.textAlign = column.align === 'center' ? 'center' : column.align === 'right' ? 'right' : 'left';
+        context.textBaseline = 'middle';
+        context.fillText(String(rowValues[column.key]), textX, rowTop + rowHeight / 2, column.width - 24);
+        currentX += column.width;
+      });
+    });
+
+    downloadDataUrl(canvas.toDataURL('image/png'), `bang-cham-cong-${employeeCode}-${selectedMonth}.png`);
+  };
+
   return (
     <div className="fade-in">
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem', marginBottom: '1.5rem', flexWrap: 'wrap' }}>
-        <div>
-          <h1 style={{ fontSize: '1.75rem', fontWeight: '700', marginBottom: '0.25rem' }}>Chấm công nhân viên</h1>
-          <p style={{ color: 'var(--text-muted)', margin: 0 }}>
-            Mặc định {DEFAULT_DAILY_HOURS} tiếng mỗi ngày, cuối ngày chỉ cần nhập thêm số giờ tăng ca hoặc thiếu giờ.
+      <div className="card" style={{ marginBottom: '1.5rem' }}>
+        <div style={{ marginBottom: '1rem' }}>
+          <h2 style={{ fontSize: '1.125rem', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Clock3 size={18} />
+            Chấm công nhanh
+          </h2>
+          <p style={{ color: 'var(--text-muted)', marginTop: '0.25rem' }}>
+            Chọn người chấm, ngày và nhập số giờ tăng ca theo dạng text.
           </p>
         </div>
 
-        <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', minWidth: '280px' }}>
-          {isManager && (
-            <div className="card" style={{ padding: '0.75rem 1rem', margin: 0, minWidth: '160px' }}>
-              <label style={{ marginBottom: '6px' }}>Tháng</label>
-              <input type="month" value={selectedMonth} onChange={(e) => setSelectedMonth(e.target.value)} />
-            </div>
-          )}
-          <div className="card" style={{ padding: '0.75rem 1rem', margin: 0, minWidth: '220px' }}>
-            <label style={{ marginBottom: '6px' }}>{isManager ? 'Nhân viên đang xem' : 'Nhân viên'}</label>
-            <select value={selectedEmployeeCode} onChange={(e) => setSelectedEmployeeCode(e.target.value)}>
-              {employees.map((employee) => (
-                <option key={employee.manv} value={employee.manv}>
-                  {employee.tennv || employee.username}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-      </div>
-
-      {errorMessage && (
-        <div className="card" style={{ marginBottom: '1.5rem', background: '#fef2f2', border: '1px solid #fecaca', color: '#b91c1c' }}>
-          {errorMessage}
-        </div>
-      )}
-
-      <div className="card" style={{ marginBottom: '1.5rem' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem', flexWrap: 'wrap', marginBottom: '1rem' }}>
-          <div>
-            <h2 style={{ fontSize: '1.125rem', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <Clock3 size={18} />
-              Chấm công nhanh
-            </h2>
-            <p style={{ color: 'var(--text-muted)', marginTop: '0.25rem' }}>
-              Form đơn giản để nhập giờ tăng ca trong ngày.
-            </p>
-          </div>
-        </div>
-
-        <form onSubmit={handleQuickAttendanceSave} className="attendance-quick-form" style={{ display: 'grid', gridTemplateColumns: isManager ? '1.4fr 1fr 1fr auto' : '1.2fr 1fr 1fr', gap: '1rem', alignItems: 'end' }}>
+        <form
+          onSubmit={handleQuickAttendanceSave}
+          className="attendance-quick-form"
+          style={{
+            display: 'grid',
+            gridTemplateColumns: '1.3fr 1fr 1.2fr auto',
+            gap: '1rem',
+            alignItems: 'end'
+          }}
+        >
           <div>
             <label>Người chấm</label>
             <select
@@ -914,18 +1079,74 @@ function AttendancePayroll() {
           <div>
             <label>Số giờ tăng ca</label>
             <input
-              type="number"
-              step="0.5"
-              min="0"
-              value={quickEntry.overtimeHours}
-              onChange={(e) => setQuickEntry((previous) => ({ ...previous, overtimeHours: e.target.value }))}
-              placeholder="VD: 2"
+              type="text"
+              value={quickEntry.overtimeText}
+              onChange={(e) => setQuickEntry((previous) => ({ ...previous, overtimeText: e.target.value }))}
+              placeholder="VD: 1 giờ 30 phút"
             />
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginTop: '0.75rem' }}>
+              {QUICK_HOUR_TAGS.map((hour) => (
+                <button
+                  key={`hour-${hour}`}
+                  type="button"
+                  className="btn"
+                  style={{ padding: '0.375rem 0.75rem', background: '#eff6ff', color: '#1d4ed8', border: '1px solid #bfdbfe' }}
+                  onClick={() => handleQuickTagClick('hours', hour)}
+                >
+                  {hour} giờ
+                </button>
+              ))}
+              {QUICK_MINUTE_TAGS.map((minute) => (
+                <button
+                  key={`minute-${minute}`}
+                  type="button"
+                  className="btn"
+                  style={{ padding: '0.375rem 0.75rem', background: '#f8fafc', color: 'var(--text-main)', border: '1px solid var(--border)' }}
+                  onClick={() => handleQuickTagClick('minutes', minute)}
+                >
+                  {minute} phút
+                </button>
+              ))}
+            </div>
           </div>
           <button type="submit" className="btn btn-primary" disabled={savingQuick} style={{ minWidth: '120px' }}>
             {savingQuick ? 'Đang lưu...' : 'Lưu'}
           </button>
         </form>
+      </div>
+
+      {errorMessage && (
+        <div className="card" style={{ marginBottom: '1.5rem', background: '#fef2f2', border: '1px solid #fecaca', color: '#b91c1c' }}>
+          {errorMessage}
+        </div>
+      )}
+
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem', marginBottom: '1.5rem', flexWrap: 'wrap' }}>
+        <div>
+          <h1 style={{ fontSize: '1.75rem', fontWeight: '700', marginBottom: '0.25rem' }}>Chấm công nhân viên</h1>
+          <p style={{ color: 'var(--text-muted)', margin: 0 }}>
+            Mặc định {DEFAULT_DAILY_HOURS} tiếng mỗi ngày, cuối ngày chỉ cần nhập thêm số giờ tăng ca hoặc thiếu giờ.
+          </p>
+        </div>
+
+        {isManager && (
+          <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', minWidth: '280px' }}>
+            <div className="card" style={{ padding: '0.75rem 1rem', margin: 0, minWidth: '160px' }}>
+              <label style={{ marginBottom: '6px' }}>Tháng</label>
+              <input type="month" value={selectedMonth} onChange={(e) => setSelectedMonth(e.target.value)} />
+            </div>
+            <div className="card" style={{ padding: '0.75rem 1rem', margin: 0, minWidth: '220px' }}>
+              <label style={{ marginBottom: '6px' }}>Nhân viên đang xem</label>
+              <select value={selectedEmployeeCode} onChange={(e) => setSelectedEmployeeCode(e.target.value)}>
+                {employees.map((employee) => (
+                  <option key={employee.manv} value={employee.manv}>
+                    {employee.tennv || employee.username}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+        )}
       </div>
 
       {selectedSummary && (
@@ -993,14 +1214,12 @@ function AttendancePayroll() {
           </div>
 
           <div className="card" style={{ marginBottom: '1.5rem' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
-              <div>
-                <h2 style={{ fontSize: '1.125rem', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <Users size={18} />
-                  Tổng kết theo tháng
-                </h2>
-                <p style={{ color: 'var(--text-muted)', marginTop: '0.25rem' }}>Tổng hợp giờ công, tăng ca, ngày nghỉ và lương từng nhân viên.</p>
-              </div>
+            <div style={{ marginBottom: '1rem' }}>
+              <h2 style={{ fontSize: '1.125rem', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Users size={18} />
+                Tổng kết theo tháng
+              </h2>
+              <p style={{ color: 'var(--text-muted)', marginTop: '0.25rem' }}>Tổng hợp giờ công, tăng ca, ngày nghỉ và lương từng nhân viên.</p>
             </div>
 
             <div className="desktop-only" style={{ overflowX: 'auto' }}>
@@ -1037,7 +1256,10 @@ function AttendancePayroll() {
                           <button
                             className="btn"
                             style={{ background: '#f8fafc', border: '1px solid var(--border)' }}
-                            onClick={() => setSelectedEmployeeCode(String(employee.manv))}
+                            onClick={() => {
+                              setSelectedEmployeeCode(String(employee.manv));
+                              handleDownloadAttendanceImage(employee);
+                            }}
                           >
                             Chi tiết
                           </button>
@@ -1094,7 +1316,14 @@ function AttendancePayroll() {
                     </div>
                   </div>
                   <div style={{ display: 'flex', gap: '0.75rem' }}>
-                    <button className="btn" style={{ flex: 1, background: '#f8fafc', border: '1px solid var(--border)' }} onClick={() => setSelectedEmployeeCode(String(employee.manv))}>
+                    <button
+                      className="btn"
+                      style={{ flex: 1, background: '#f8fafc', border: '1px solid var(--border)' }}
+                      onClick={() => {
+                        setSelectedEmployeeCode(String(employee.manv));
+                        handleDownloadAttendanceImage(employee);
+                      }}
+                    >
                       Chi tiết
                     </button>
                     <button className="btn btn-primary" style={{ flex: 1 }} onClick={() => handleExportPayroll(employee, summary)}>
@@ -1104,10 +1333,6 @@ function AttendancePayroll() {
                 </div>
               ))}
             </div>
-
-            {!loading && employees.length === 0 && (
-              <div style={{ padding: '2rem 0', textAlign: 'center', color: 'var(--text-muted)' }}>Chưa có nhân viên để chấm công.</div>
-            )}
           </div>
 
           {selectedEmployee && selectedSummary && (
@@ -1173,16 +1398,14 @@ function AttendancePayroll() {
               </div>
 
               <div className="card">
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
-                  <div>
-                    <h2 style={{ fontSize: '1.125rem', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <CalendarDays size={18} />
-                      Bảng chấm công {selectedEmployee.tennv || selectedEmployee.username}
-                    </h2>
-                    <p style={{ color: 'var(--text-muted)', marginTop: '0.25rem' }}>
-                      Mặc định mỗi ngày là {DEFAULT_DAILY_HOURS} giờ. Nhập số dương để tăng ca, số âm nếu làm thiếu giờ.
-                    </p>
-                  </div>
+                <div style={{ marginBottom: '1rem' }}>
+                  <h2 style={{ fontSize: '1.125rem', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <CalendarDays size={18} />
+                    Bảng chấm công {selectedEmployee.tennv || selectedEmployee.username}
+                  </h2>
+                  <p style={{ color: 'var(--text-muted)', marginTop: '0.25rem' }}>
+                    Nhập `1 giờ 30 phút`, `20 phút`, hoặc `-1 giờ` để hệ thống tự quy đổi khi tính lương.
+                  </p>
                 </div>
 
                 <div className="desktop-only" style={{ overflowX: 'auto' }}>
@@ -1192,7 +1415,7 @@ function AttendancePayroll() {
                         <th style={{ textAlign: 'left', padding: '0.875rem' }}>Ngày</th>
                         <th style={{ textAlign: 'center', padding: '0.875rem' }}>Đi làm</th>
                         <th style={{ textAlign: 'right', padding: '0.875rem' }}>Giờ công</th>
-                        <th style={{ textAlign: 'right', padding: '0.875rem' }}>+/- giờ</th>
+                        <th style={{ textAlign: 'left', padding: '0.875rem' }}>+/- giờ</th>
                         <th style={{ textAlign: 'right', padding: '0.875rem' }}>Tăng ca</th>
                         <th style={{ textAlign: 'right', padding: '0.875rem' }}>Tổng giờ</th>
                         <th style={{ textAlign: 'left', padding: '0.875rem' }}>Ghi chú</th>
@@ -1203,8 +1426,8 @@ function AttendancePayroll() {
                         const dateKey = format(date, 'yyyy-MM-dd');
                         const record = attendanceMap[getAttendanceKey(selectedEmployeeCode, dateKey)];
                         const isDayOff = Boolean(record?.isDayOff);
-                        const adjustmentHours = parseNumber(record?.adjustmentHours, 0);
-                        const { regularHours, overtimeHours, totalHours } = calculateDayHours(isDayOff, adjustmentHours);
+                        const adjustmentText = record?.adjustmentText || '';
+                        const { regularHours, overtimeHours, totalHours } = calculateDayHours(isDayOff, adjustmentText);
                         const effectiveMonthEnd = getEffectiveMonthEnd(selectedMonth);
                         const isFutureForPayroll = !effectiveMonthEnd || date > effectiveMonthEnd;
 
@@ -1224,21 +1447,20 @@ function AttendancePayroll() {
                                 onChange={(e) =>
                                   handleAttendanceChange(dateKey, {
                                     isDayOff: !e.target.checked,
-                                    adjustmentHours: e.target.checked ? adjustmentHours : 0
+                                    adjustmentText: e.target.checked ? adjustmentText : ''
                                   })
                                 }
                                 style={{ width: '18px', height: '18px' }}
                               />
                             </td>
                             <td style={{ padding: '0.875rem', textAlign: 'right', fontWeight: '600' }}>{formatHourValue(regularHours)}h</td>
-                            <td style={{ padding: '0.875rem', textAlign: 'right' }}>
+                            <td style={{ padding: '0.875rem', minWidth: '180px' }}>
                               <input
-                                type="number"
-                                step="0.5"
-                                value={isDayOff ? 0 : adjustmentHours}
+                                type="text"
+                                value={isDayOff ? '' : adjustmentText}
                                 disabled={isDayOff}
-                                onChange={(e) => handleAttendanceChange(dateKey, { adjustmentHours: e.target.value })}
-                                style={{ width: '90px', marginLeft: 'auto', textAlign: 'right' }}
+                                onChange={(e) => handleAttendanceChange(dateKey, { adjustmentText: e.target.value })}
+                                placeholder="VD: 1 giờ 30 phút"
                               />
                             </td>
                             <td style={{ padding: '0.875rem', textAlign: 'right', color: '#ea580c', fontWeight: '600' }}>{formatHourValue(overtimeHours)}h</td>
@@ -1263,8 +1485,8 @@ function AttendancePayroll() {
                     const dateKey = format(date, 'yyyy-MM-dd');
                     const record = attendanceMap[getAttendanceKey(selectedEmployeeCode, dateKey)];
                     const isDayOff = Boolean(record?.isDayOff);
-                    const adjustmentHours = parseNumber(record?.adjustmentHours, 0);
-                    const { regularHours, overtimeHours, totalHours } = calculateDayHours(isDayOff, adjustmentHours);
+                    const adjustmentText = record?.adjustmentText || '';
+                    const { regularHours, overtimeHours, totalHours } = calculateDayHours(isDayOff, adjustmentText);
                     const effectiveMonthEnd = getEffectiveMonthEnd(selectedMonth);
                     const isFutureForPayroll = !effectiveMonthEnd || date > effectiveMonthEnd;
 
@@ -1285,7 +1507,7 @@ function AttendancePayroll() {
                               onChange={(e) =>
                                 handleAttendanceChange(dateKey, {
                                   isDayOff: !e.target.checked,
-                                  adjustmentHours: e.target.checked ? adjustmentHours : 0
+                                  adjustmentText: e.target.checked ? adjustmentText : ''
                                 })
                               }
                               style={{ width: '18px', height: '18px' }}
@@ -1305,11 +1527,11 @@ function AttendancePayroll() {
                           <div style={{ gridColumn: '1 / -1' }}>
                             <label style={{ marginBottom: '6px' }}>+/- giờ</label>
                             <input
-                              type="number"
-                              step="0.5"
-                              value={isDayOff ? 0 : adjustmentHours}
+                              type="text"
+                              value={isDayOff ? '' : adjustmentText}
                               disabled={isDayOff}
-                              onChange={(e) => handleAttendanceChange(dateKey, { adjustmentHours: e.target.value })}
+                              onChange={(e) => handleAttendanceChange(dateKey, { adjustmentText: e.target.value })}
+                              placeholder="VD: 1 giờ 30 phút"
                             />
                           </div>
                           <div style={{ gridColumn: '1 / -1' }}>
