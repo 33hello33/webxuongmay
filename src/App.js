@@ -7,8 +7,9 @@ import Shipping from './components/Shipping';
 import Expenses from './components/Expenses';
 import DefectiveGoods from './components/DefectiveGoods';
 import BaTam from './components/BaTam';
+import AttendancePayroll from './components/AttendancePayroll';
 import Login from './components/Login';
-import { LayoutDashboard, Box, Users, Bell, Truck, Settings, Wallet, X, AlertCircle, ShoppingBag, LogOut, User } from 'lucide-react';
+import { LayoutDashboard, Box, Users, Bell, Truck, Wallet, X, AlertCircle, ShoppingBag, LogOut, Clock3 } from 'lucide-react';
 
 function App() {
   const [user, setUser] = useState(null);
@@ -79,6 +80,7 @@ function App() {
       case 'defective': return <DefectiveGoods />;
       case 'batam': return <BaTam />;
       case 'expenses': return <Expenses />;
+      case 'attendance': return <AttendancePayroll />;
       default: return <Overview />;
     }
   };
@@ -165,6 +167,16 @@ function App() {
             </>
           )}
 
+          <button
+            className={`tab-btn ${activeTab === 'attendance' ? 'active' : ''}`}
+            onClick={() => setActiveTab('attendance')}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Clock3 size={18} />
+              <span>Chấm công NV</span>
+            </div>
+          </button>
+
         </nav>
 
         <div className="header-actions">
@@ -238,4 +250,3 @@ function App() {
 
 
 export default App;
-

@@ -283,9 +283,23 @@ input:focus {
     height: calc(100vh - 120px); /* Adjust based on header height */
   }
 
+  .grid-4 {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+
   .grid-3, .grid-2 {
     grid-template-columns: 1fr;
     gap: 1rem;
+  }
+
+  .attendance-layout {
+    grid-template-columns: 1fr !important;
+  }
+
+  .attendance-quick-form,
+  .attendance-global-config {
+    grid-template-columns: 1fr !important;
   }
 
   .modal-container {
@@ -683,4 +697,3 @@ img[src*="supabase"]:hover, img[src*="googleusercontent"]:hover {
 .animate-spin {
   animation: spin 1s linear infinite;
 }
-
