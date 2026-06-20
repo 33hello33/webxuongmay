@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabase';
 import { AlertTriangle, CheckCircle, Package, Tag, Truck, X } from 'lucide-react';
 import { createPortal } from 'react-dom';
@@ -344,7 +344,23 @@ function Overview() {
                     />}
                   </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontWeight: '700', fontSize: '1rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{s.product_name}</div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px' }}>
+                      <div
+                        style={{
+                          fontWeight: '700',
+                          fontSize: '1rem',
+                          lineHeight: 1.35,
+                          wordBreak: 'break-word',
+                          display: '-webkit-box',
+                          WebkitLineClamp: 3,
+                          WebkitBoxOrient: 'vertical',
+                          overflow: 'hidden'
+                        }}
+                      >
+                        {s.product_name}
+                      </div>
+                      <span style={{ fontSize: '0.75rem', fontWeight: '700', color: '#8b5cf6', flexShrink: 0 }}>#{s.id}</span>
+                    </div>
                     <div style={{ fontSize: '0.8125rem', color: 'var(--text-muted)', marginTop: '4px' }}>
                       {s.customers?.name || '—'}
                     </div>

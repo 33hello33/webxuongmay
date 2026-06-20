@@ -20,6 +20,7 @@ function Goods() {
   const [productHistory, setProductHistory] = useState([]);
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [shippingLookupLoading, setShippingLookupLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterDate, setFilterDate] = useState('');
   const [filterBuyer, setFilterBuyer] = useState('');
@@ -41,6 +42,9 @@ function Goods() {
   });
   const [imageFile, setImageFile] = useState(null);
   const [imagePreview, setImagePreview] = useState(null);
+  const [shippingReferenceId, setShippingReferenceId] = useState('');
+  const [shippingReference, setShippingReference] = useState(null);
+  const [shippingReferenceError, setShippingReferenceError] = useState('');
 
   useEffect(() => {
     fetchProducts();
@@ -51,6 +55,62 @@ function Goods() {
   useEffect(() => {
     setDisplayLimit(15);
   }, [searchQuery, filterDate, filterBuyer, sortBy, sortOrder]);
+
+  useEffect(() => {
+    let isActive = true;
+
+    if (showModal !== 'export') {
+      setShippingReferenceId('');
+      setShippingReference(null);
+      setShippingReferenceError('');
+      setShippingLookupLoading(false);
+      return undefined;
+    }
+
+    const referenceId = shippingReferenceId.trim();
+    if (!referenceId) {
+      setShippingReference(null);
+      setShippingReferenceError('');
+      setShippingLookupLoading(false);
+      return undefined;
+    }
+
+    if (!/^\d+$/.test(referenceId)) {
+      setShippingReference(null);
+      setShippingReferenceError('ID không hợp lệ.');
+      setShippingLookupLoading(false);
+      return undefined;
+    }
+
+    const loadShippingReference = async () => {
+      setShippingLookupLoading(true);
+      const { data, error } = await supabase
+        .from('transactions')
+        .select('*, customers(name)')
+        .eq('type', 'shipping')
+        .eq('id', Number(referenceId))
+        .maybeSingle();
+
+      if (!isActive) return;
+
+      if (error || !data) {
+        setShippingReference(null);
+        setShippingReferenceError('Không tìm thấy hàng gửi này.');
+        setShippingLookupLoading(false);
+        return;
+      }
+
+      setShippingReference(data);
+      setShippingReferenceError('');
+      setShippingLookupLoading(false);
+    };
+
+    loadShippingReference();
+
+    return () => {
+      isActive = false;
+    };
+  }, [shippingReferenceId, showModal]);
 
   const fetchProducts = async () => {
     const { data } = await supabase.from('products').select('*').order('id', { ascending: false });
@@ -210,6 +270,18 @@ function Goods() {
     const qtyText = formData.quantity;
     const prevQty = selectedProduct?.quantity || "";
     const newQty = smartUpdateQuantity(prevQty, qtyText, type === 'import');
+    const referenceId = shippingReferenceId.trim();
+
+    if (type === 'export' && referenceId && !shippingReference) {
+      alert('Không tìm thấy hàng gửi để liên kết.');
+      setLoading(false);
+      return;
+    }
+
+    const referenceNote = type === 'export' && shippingReference
+      ? ` | Hàng gửi #${shippingReference.id} - ${shippingReference.product_name || '—'} - ${shippingReference.quantity || '—'} - ${shippingReference.customers?.name || '—'}`
+      : '';
+    const finalNotes = `${formData.recorder}${referenceNote}`;
 
     const { error: txError } = await supabase.from('transactions').insert([{
       product_id: selectedProduct?.id,
@@ -218,7 +290,7 @@ function Goods() {
       prev_quantity: prevQty,
       new_quantity: newQty,
       date: new Date().toISOString(),
-      notes: formData.recorder
+      notes: finalNotes
     }]);
 
     if (!txError && selectedProduct) {
@@ -268,6 +340,10 @@ function Goods() {
     setSelectedProduct(null);
     setImageFile(null);
     setImagePreview(null);
+    setShippingReferenceId('');
+    setShippingReference(null);
+    setShippingReferenceError('');
+    setShippingLookupLoading(false);
   };
 
   const popularTags = React.useMemo(() => {
@@ -628,11 +704,45 @@ function Goods() {
                       {['của mình', 'bà tám'].map(name => <button key={name} type="button" onClick={() => setFormData({ ...formData, recorder: name })} style={{ padding: '4px 12px', fontSize: '0.75rem', borderRadius: '20px', border: '1px solid var(--border)', background: formData.recorder === name ? 'var(--primary)' : 'white', color: formData.recorder === name ? 'white' : 'var(--text-main)', cursor: 'pointer' }}>{name}</button>)}
                     </div>
                   </div>
+                  {showModal === 'export' && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                      <div>
+                        <label style={{ display: 'block', marginBottom: '4px', fontSize: '0.875rem', fontWeight: '500' }}>ID hàng gửi</label>
+                        <input
+                          type="text"
+                          placeholder="Nhập ID hàng gửi..."
+                          value={shippingReferenceId}
+                          onChange={e => setShippingReferenceId(e.target.value)}
+                        />
+                      </div>
+
+                      {shippingLookupLoading && (
+                        <div style={{ fontSize: '0.8125rem', color: 'var(--text-muted)' }}>
+                          Đang tìm hàng gửi...
+                        </div>
+                      )}
+
+                      {shippingReferenceError && (
+                        <div style={{ fontSize: '0.8125rem', color: '#dc2626' }}>
+                          {shippingReferenceError}
+                        </div>
+                      )}
+
+                      {shippingReference && (
+                        <div style={{ background: '#f8fafc', border: '1px solid var(--border)', borderRadius: '10px', padding: '0.75rem' }}>
+                          <div style={{ fontWeight: '700', color: 'var(--primary)', marginBottom: '6px' }}>#{shippingReference.id}</div>
+                          <div style={{ fontWeight: '600', marginBottom: '4px' }}>{shippingReference.product_name || 'Hàng không tên'}</div>
+                          <div style={{ fontSize: '0.8125rem', color: 'var(--text-muted)' }}>Số lượng: {shippingReference.quantity || '—'}</div>
+                          <div style={{ fontSize: '0.8125rem', color: 'var(--text-muted)' }}>Khách hàng: {shippingReference.customers?.name || '—'}</div>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
               <div style={{ marginTop: '2rem', display: 'flex', gap: '10px' }}>
                 <button type="button" className="btn" style={{ flex: 1, background: '#f1f5f9' }} onClick={() => setShowModal(null)}>Hủy</button>
-                <button type="submit" className="btn btn-primary" style={{ flex: 2 }} disabled={loading}>{loading ? 'Đang xử lý...' : 'Xác nhận'}</button>
+                <button type="submit" className="btn btn-primary" style={{ flex: 2 }} disabled={loading || shippingLookupLoading}>{loading ? 'Đang xử lý...' : 'Xác nhận'}</button>
               </div>
             </form>
           </div>
