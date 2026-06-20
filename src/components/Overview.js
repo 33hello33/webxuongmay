@@ -1,7 +1,13 @@
 ﻿import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabase';
-import { AlertTriangle, Package, Tag, Truck, X } from 'lucide-react';
+import { AlertTriangle, CheckCircle, Package, Tag, Truck, X } from 'lucide-react';
 import { createPortal } from 'react-dom';
+import {
+  calculateSentShippingTotal,
+  formatQuantityTotal,
+  getStartOfMonthDateValue,
+  getTodayDateValue
+} from '../utils/shippingStats';
 const STATUS_LIST = [
   { id: 'tiếp nhận', label: 'Tiếp nhận', color: '#64748b', bg: '#f1f5f9' },
   { id: 'soạn hàng', label: 'Soạn hàng', color: '#0ea5e9', bg: '#f0f9ff' },
@@ -23,6 +29,7 @@ function Overview() {
   const [customers, setCustomers] = useState([]);
   const [lowStock, setLowStock] = useState([]);
   const [shippingCount, setShippingCount] = useState(0);
+  const [sentShippingTotal, setSentShippingTotal] = useState(0);
   const [activeShippings, setActiveShippings] = useState([]);
   const [shippingCustomerFilter, setShippingCustomerFilter] = useState('');
   const [shippingStatusFilter, setShippingStatusFilter] = useState('');
@@ -56,7 +63,6 @@ function Overview() {
         .eq('type', 'shipping')
         .order('edit', { ascending: false, nullsFirst: false })
         .order('date', { ascending: false })
-        .neq('status', 'đã gửi')
     ]);
 
     if (productData) {
@@ -69,8 +75,16 @@ function Overview() {
     }
 
     if (shippingData) {
-      setShippingCount(shippingData.length);
-      setActiveShippings(shippingData);
+      const activeShippingData = shippingData.filter(shipping => shipping.status !== 'đã gửi');
+      setShippingCount(activeShippingData.length);
+      setActiveShippings(activeShippingData);
+      setSentShippingTotal(
+        calculateSentShippingTotal(
+          shippingData,
+          getStartOfMonthDateValue(),
+          getTodayDateValue()
+        )
+      );
     }
   };
 
@@ -178,7 +192,10 @@ function Overview() {
 
   return (
     <div className="fade-in">
-      <div className="grid grid-4 summary-grid-mobile" style={{ marginBottom: '3rem' }}>
+      <div
+        className="grid summary-grid-mobile"
+        style={{ marginBottom: '3rem', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))' }}
+      >
         <div className="card summary-card-mobile" style={{ borderLeft: '4px solid #ef4444' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '1rem' }}>
             <div className="card-icon" style={{ background: '#fef2f2', padding: '10px', borderRadius: '10px' }}>
@@ -199,6 +216,19 @@ function Overview() {
           </div>
           <div className="card-number" style={{ fontSize: '2.5rem', fontWeight: '800' }}>{shippingCount}</div>
           <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>Đơn hàng đang trong quá trình gửi</p>
+        </div>
+
+        <div className="card summary-card-mobile" style={{ borderLeft: '4px solid #d946ef' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '1rem' }}>
+            <div className="card-icon" style={{ background: '#fdf4ff', padding: '10px', borderRadius: '10px' }}>
+              <CheckCircle color="#d946ef" size={24} />
+            </div>
+            <span className="card-label" style={{ fontWeight: '600', color: '#a21caf' }}>Tổng đã gửi trong tháng này</span>
+          </div>
+          <div className="card-number" style={{ fontSize: '2.5rem', fontWeight: '800' }}>
+            {formatQuantityTotal(sentShippingTotal)}
+          </div>
+          <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>Từ đầu tháng đến hiện tại</p>
         </div>
 
         <div className="card summary-card-mobile" style={{ borderLeft: '4px solid var(--primary)' }}>

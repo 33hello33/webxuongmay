@@ -1,10 +1,19 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabase';
-import { Plus, X, Truck, Clock, CheckCircle, Package, AlertCircle, Camera, Search, Trash2, Calendar, Edit } from 'lucide-react';
+import { Plus, X, CheckCircle, Camera, Search, Trash2, Edit } from 'lucide-react';
 import { format } from 'date-fns';
 import { vi } from 'date-fns/locale';
 import { createPortal } from 'react-dom';
 import { uploadImage } from '../lib/uploadHelper';
+import {
+  calculateSentShippingTotal,
+  formatQuantityTotal,
+  getStartOfMonthDateValue,
+  getSentShippingDate,
+  getTodayDateValue,
+  isDateWithinRange,
+  parseDbTimestamp
+} from '../utils/shippingStats';
 
 
 const STATUS_LIST = [
@@ -23,12 +32,6 @@ const toLocalDbTimestamp = () => {
   return new Date(now - offsetMs).toISOString().slice(0, 19);
 };
 
-const parseDbTimestamp = (value) => {
-  if (!value) return null;
-  const parsed = new Date(typeof value === 'string' ? value.replace(' ', 'T') : value);
-  return Number.isNaN(parsed.getTime()) ? null : parsed;
-};
-
 function Shipping() {
   const [shippings, setShippings] = useState([]);
   const [products, setProducts] = useState([]);
@@ -36,8 +39,11 @@ function Shipping() {
   const [loading, setLoading] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [filterDate, setFilterDate] = useState('');
   const [filterBuyer, setFilterBuyer] = useState('');
+  const [filterStatus, setFilterStatus] = useState('');
+  const [sentRangeFrom, setSentRangeFrom] = useState(getStartOfMonthDateValue());
+  const [sentRangeTo, setSentRangeTo] = useState(getTodayDateValue());
+  const [isSentRangeFilterActive, setIsSentRangeFilterActive] = useState(false);
   const [editingId, setEditingId] = useState(null);
 
   // Form state
@@ -204,18 +210,36 @@ function Shipping() {
     setImagePreview(null);
   };
 
-  const filteredShippings = shippings.filter(s => {
-    // 1. Filter by literal date
-    if (filterDate) {
-      if (format(new Date(s.date), 'yyyy-MM-dd') !== filterDate) return false;
+  const handleSentRangeChange = (field, value) => {
+    if (field === 'from') {
+      setSentRangeFrom(value);
+    } else {
+      setSentRangeTo(value);
     }
+    setIsSentRangeFilterActive(true);
+    setFilterStatus('đã gửi');
+  };
 
-    // 2. Filter by Buyer (Customer)
+  const filteredShippings = shippings.filter(s => {
+    // 1. Filter by Buyer (Customer)
     if (filterBuyer) {
       if (s.buyer_id?.toString() !== filterBuyer) return false;
     }
 
-    // 3. Robust Search Query
+    // 2. Filter by Status
+    if (filterStatus && s.status !== filterStatus) {
+      return false;
+    }
+
+    // 3. Filter by sent date range from summary card
+    if (isSentRangeFilterActive && filterStatus === 'đã gửi') {
+      const sentDate = getSentShippingDate(s);
+      if (!isDateWithinRange(sentDate, sentRangeFrom, sentRangeTo)) {
+        return false;
+      }
+    }
+
+    // 4. Robust Search Query
     if (!searchQuery.trim()) return true;
     const searchTerms = searchQuery.toLowerCase().split(/[\s,]+/).filter(t => t.length > 0);
 
@@ -237,6 +261,9 @@ function Shipping() {
     );
   });
 
+  const sentShippingTotal = calculateSentShippingTotal(shippings, sentRangeFrom, sentRangeTo);
+  const hasInvalidSentRange = sentRangeFrom && sentRangeTo && sentRangeFrom > sentRangeTo;
+
   const formatEditDate = (value) => {
     const parsed = parseDbTimestamp(value);
     if (!parsed) return '-';
@@ -253,6 +280,40 @@ function Shipping() {
         <button className="btn btn-primary" onClick={() => { resetForm(); setShowModal(true); }}>
           <Plus size={18} style={{ marginRight: '8px' }} /> Tạo đơn gửi mới
         </button>
+      </div>
+
+      <div className="card" style={{ marginBottom: '1.5rem', borderLeft: '4px solid #d946ef' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem', flexWrap: 'wrap' }}>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '1rem' }}>
+              <div style={{ background: '#fdf4ff', padding: '10px', borderRadius: '10px' }}>
+                <CheckCircle color="#d946ef" size={24} />
+              </div>
+              <span style={{ fontWeight: '600', color: '#a21caf' }}>Tổng hàng đã gửi</span>
+            </div>
+            <div style={{ fontSize: '2.5rem', fontWeight: '800' }}>{formatQuantityTotal(sentShippingTotal)}</div>
+            <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)', marginTop: '0.5rem' }}>
+              Tính theo khoảng ngày đã chọn
+            </p>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '10px', flex: '1 1 340px' }}>
+            <div>
+              <label>Từ ngày</label>
+              <input type="date" value={sentRangeFrom} onChange={e => handleSentRangeChange('from', e.target.value)} />
+            </div>
+            <div>
+              <label>Đến ngày</label>
+              <input type="date" value={sentRangeTo} onChange={e => handleSentRangeChange('to', e.target.value)} />
+            </div>
+          </div>
+        </div>
+
+        {hasInvalidSentRange && (
+          <div style={{ marginTop: '0.75rem', fontSize: '0.8125rem', color: '#dc2626' }}>
+            Khoảng ngày không hợp lệ.
+          </div>
+        )}
       </div>
 
       <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginBottom: '1.5rem' }}>
@@ -283,15 +344,18 @@ function Shipping() {
             {filterBuyer && <X size={16} onClick={() => setFilterBuyer('')} style={{ cursor: 'pointer', color: '#ef4444' }} />}
           </div>
 
-          <div className="card" style={{ padding: '0.5rem 1rem', display: 'flex', alignItems: 'center', gap: '10px', flex: 1, margin: 0, height: '45px', cursor: 'pointer' }}>
-            <Calendar size={20} color="var(--text-muted)" />
-            <input
-              type="date"
-              value={filterDate}
-              onChange={e => setFilterDate(e.target.value)}
-              style={{ border: 'none', background: 'transparent', color: 'var(--text-main)', outline: 'none', width: '100%', height: '100%', padding: 0, cursor: 'pointer' }}
-            />
-            {filterDate && <X size={16} onClick={() => setFilterDate('')} style={{ cursor: 'pointer', color: '#ef4444' }} />}
+          <div className="card" style={{ padding: '0.5rem 1rem', display: 'flex', alignItems: 'center', gap: '10px', flex: 1, margin: 0, height: '45px' }}>
+            <select
+              value={filterStatus}
+              onChange={e => setFilterStatus(e.target.value)}
+              style={{ border: 'none', background: 'transparent', color: 'var(--text-main)', outline: 'none', cursor: 'pointer', width: '100%', padding: 0 }}
+            >
+              <option value="">Trạng thái</option>
+              {STATUS_LIST.map(status => (
+                <option key={status.id} value={status.id}>{status.label}</option>
+              ))}
+            </select>
+            {filterStatus && <X size={16} onClick={() => setFilterStatus('')} style={{ cursor: 'pointer', color: '#ef4444' }} />}
           </div>
         </div>
       </div>
