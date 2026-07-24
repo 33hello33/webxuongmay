@@ -6,6 +6,16 @@ import { vi } from 'date-fns/locale';
 import { createPortal } from 'react-dom';
 import { uploadImage } from '../lib/uploadHelper';
 
+const STATUS_LIST = [
+  { id: 'tiếp nhận', label: 'Tiếp nhận', color: '#64748b', bg: '#f1f5f9' },
+  { id: 'soạn hàng', label: 'Soạn hàng', color: '#0ea5e9', bg: '#f0f9ff' },
+  { id: 'cắt vải', label: 'Cắt vải', color: '#6366f1', bg: '#e0e7ff' },
+  { id: 'lên chuyền', label: 'Lên chuyền', color: '#8b5cf6', bg: '#f5f3ff' },
+  { id: 'kiểm hàng', label: 'Kiểm hàng', color: '#f59e0b', bg: '#fffbeb' },
+  { id: 'hoàn thành', label: 'Hoàn thành', color: '#10b981', bg: '#ecfdf5' },
+  { id: 'đã gửi', label: 'Đã gửi', color: '#d946ef', bg: '#fdf4ff' }
+];
+
 function Goods() {
   const sessionData = localStorage.getItem('app_session');
   const currentUser = sessionData ? JSON.parse(sessionData).user : null;
@@ -42,9 +52,9 @@ function Goods() {
   });
   const [imageFile, setImageFile] = useState(null);
   const [imagePreview, setImagePreview] = useState(null);
-  const [shippingReferenceId, setShippingReferenceId] = useState('');
-  const [shippingReference, setShippingReference] = useState(null);
-  const [shippingReferenceError, setShippingReferenceError] = useState('');
+  const [shippingList, setShippingList] = useState([]);
+  const [selectedShippingId, setSelectedShippingId] = useState(null);
+  const [shippingLoading, setShippingLoading] = useState(false);
 
   useEffect(() => {
     fetchProducts();
@@ -53,64 +63,32 @@ function Goods() {
   }, []);
 
   useEffect(() => {
-    setDisplayLimit(15);
-  }, [searchQuery, filterDate, filterBuyer, sortBy, sortOrder]);
-
-  useEffect(() => {
-    let isActive = true;
-
     if (showModal !== 'export') {
-      setShippingReferenceId('');
-      setShippingReference(null);
-      setShippingReferenceError('');
-      setShippingLookupLoading(false);
-      return undefined;
+      setSelectedShippingId(null);
+      setShippingList([]);
+      return;
     }
 
-    const referenceId = shippingReferenceId.trim();
-    if (!referenceId) {
-      setShippingReference(null);
-      setShippingReferenceError('');
-      setShippingLookupLoading(false);
-      return undefined;
-    }
-
-    if (!/^\d+$/.test(referenceId)) {
-      setShippingReference(null);
-      setShippingReferenceError('ID không hợp lệ.');
-      setShippingLookupLoading(false);
-      return undefined;
-    }
-
-    const loadShippingReference = async () => {
-      setShippingLookupLoading(true);
-      const { data, error } = await supabase
+    const fetchShippingList = async () => {
+      setShippingLoading(true);
+      const { data } = await supabase
         .from('transactions')
         .select('*, customers(name)')
         .eq('type', 'shipping')
-        .eq('id', Number(referenceId))
-        .maybeSingle();
-
-      if (!isActive) return;
-
-      if (error || !data) {
-        setShippingReference(null);
-        setShippingReferenceError('Không tìm thấy hàng gửi này.');
-        setShippingLookupLoading(false);
-        return;
+        .order('edit', { ascending: false, nullsFirst: false })
+        .order('date', { ascending: false });
+      if (data) {
+        setShippingList(data.filter(shipping => shipping.status !== 'đã gửi'));
       }
-
-      setShippingReference(data);
-      setShippingReferenceError('');
-      setShippingLookupLoading(false);
+      setShippingLoading(false);
     };
 
-    loadShippingReference();
+    fetchShippingList();
+  }, [showModal]);
 
-    return () => {
-      isActive = false;
-    };
-  }, [shippingReferenceId, showModal]);
+  const handleToggleShippingSelect = (id) => {
+    setSelectedShippingId(prev => (prev === id ? null : id));
+  };
 
   const fetchProducts = async () => {
     const { data } = await supabase.from('products').select('*').order('id', { ascending: false });
@@ -270,16 +248,9 @@ function Goods() {
     const qtyText = formData.quantity;
     const prevQty = selectedProduct?.quantity || "";
     const newQty = smartUpdateQuantity(prevQty, qtyText, type === 'import');
-    const referenceId = shippingReferenceId.trim();
-
-    if (type === 'export' && referenceId && !shippingReference) {
-      alert('Không tìm thấy hàng gửi để liên kết.');
-      setLoading(false);
-      return;
-    }
-
-    const referenceNote = type === 'export' && shippingReference
-      ? ` | Hàng gửi #${shippingReference.id} - ${shippingReference.product_name || '—'} - ${shippingReference.quantity || '—'} - ${shippingReference.customers?.name || '—'}`
+    const selectedShipping = selectedShippingId ? shippingList.find(s => s.id === selectedShippingId) : null;
+    const referenceNote = type === 'export' && selectedShipping
+      ? ` | Hàng gửi #${selectedShipping.id} - ${selectedShipping.product_name || '—'} - ${selectedShipping.quantity || '—'} - ${selectedShipping.customers?.name || '—'}`
       : '';
     const finalNotes = `${formData.recorder}${referenceNote}`;
 
@@ -305,6 +276,16 @@ function Goods() {
     setLoading(false);
   };
 
+  const lastModifiedMap = React.useMemo(() => {
+    const map = {};
+    transactions.forEach(tx => {
+      if (tx.product_id && !map[tx.product_id]) {
+        map[tx.product_id] = tx.date;
+      }
+    });
+    return map;
+  }, [transactions]);
+
   const getFilteredProducts = () => {
     let result = products;
     if (filterDate) result = result.filter(p => p.created_at && format(new Date(p.created_at), 'yyyy-MM-dd') === filterDate);
@@ -316,11 +297,13 @@ function Goods() {
         const description = (product.description || '').toLowerCase();
         const name = (product.name || '').toLowerCase();
         const dateStr = product.created_at ? format(new Date(product.created_at), 'dd/MM/yyyy') : '';
+        const lastDateStr = lastModifiedMap[product.id] ? format(new Date(lastModifiedMap[product.id]), 'dd/MM/yyyy HH:mm') : '';
         return searchTerms.every(term =>
           productTags.some(tag => tag.includes(term)) ||
           description.includes(term) ||
           name.includes(term) ||
-          dateStr.includes(term)
+          dateStr.includes(term) ||
+          lastDateStr.includes(term)
         );
       });
     }
@@ -329,6 +312,11 @@ function Goods() {
       if (sortBy === 'id') comparison = a.id - b.id;
       else if (sortBy === 'name') comparison = (a.name || '').localeCompare(b.name || '');
       else if (sortBy === 'created_at') comparison = new Date(a.created_at || 0) - new Date(b.created_at || 0);
+      else if (sortBy === 'last_modified') {
+        const dateA = lastModifiedMap[a.id] ? new Date(lastModifiedMap[a.id]).getTime() : 0;
+        const dateB = lastModifiedMap[b.id] ? new Date(lastModifiedMap[b.id]).getTime() : 0;
+        comparison = dateA - dateB;
+      }
       return sortOrder === 'desc' ? -comparison : comparison;
     });
   };
@@ -340,10 +328,9 @@ function Goods() {
     setSelectedProduct(null);
     setImageFile(null);
     setImagePreview(null);
-    setShippingReferenceId('');
-    setShippingReference(null);
-    setShippingReferenceError('');
-    setShippingLookupLoading(false);
+    setSelectedShippingId(null);
+    setShippingList([]);
+    setShippingLoading(false);
   };
 
   const popularTags = React.useMemo(() => {
@@ -448,6 +435,12 @@ function Goods() {
                   Ngày nhập {sortBy === 'created_at' && (sortOrder === 'desc' ? '↓' : '↑')}
                 </th>
                 <th 
+                  onClick={() => handleSort('last_modified')}
+                  style={{ textAlign: 'left', padding: '1rem', color: sortBy === 'last_modified' ? 'var(--primary)' : 'var(--text-muted)', fontSize: '0.75rem', textTransform: 'uppercase', cursor: 'pointer', userSelect: 'none' }}
+                >
+                  Ngày sửa gần nhất {sortBy === 'last_modified' && (sortOrder === 'desc' ? '↓' : '↑')}
+                </th>
+                <th 
                   onClick={() => handleSort('name')}
                   style={{ textAlign: 'left', padding: '1rem', color: sortBy === 'name' ? 'var(--primary)' : 'var(--text-muted)', fontSize: '0.75rem', textTransform: 'uppercase', cursor: 'pointer', userSelect: 'none' }}
                 >
@@ -466,6 +459,9 @@ function Goods() {
                   <td style={{ padding: '1rem', fontSize: '0.875rem', fontWeight: '700', color: 'var(--primary)' }}>#{p.id}</td>
                   <td style={{ padding: '1rem', fontSize: '0.875rem' }}>
                     {p.created_at ? format(new Date(p.created_at), 'dd/MM/yyyy') : '—'}
+                  </td>
+                  <td style={{ padding: '1rem', fontSize: '0.875rem' }}>
+                    {lastModifiedMap[p.id] ? format(new Date(lastModifiedMap[p.id]), 'dd/MM/yyyy HH:mm') : '—'}
                   </td>
                   <td style={{ padding: '1rem' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
@@ -521,6 +517,9 @@ function Goods() {
                     <div style={{ fontWeight: '700', fontSize: '1rem' }}>#{p.id} - {p.name}</div>
                     <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
                       Ngày nhập: {p.created_at ? format(new Date(p.created_at), 'dd/MM/yyyy') : '—'}
+                    </div>
+                    <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                      Sửa gần nhất: {lastModifiedMap[p.id] ? format(new Date(lastModifiedMap[p.id]), 'dd/MM/yyyy HH:mm') : '—'}
                     </div>
                     <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '4px' }}>{p.description || 'Không có mô tả'}</div>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
@@ -613,7 +612,7 @@ function Goods() {
 
       {showModal && createPortal(
         <div className="modal-overlay">
-          <div className="modal-container" onClick={e => e.stopPropagation()}>
+          <div className="modal-container" style={{ maxWidth: showModal === 'export' ? '650px' : undefined }} onClick={e => e.stopPropagation()}>
             <button className="modal-close" onClick={() => setShowModal(null)}><X size={20} /></button>
             <h2 style={{ marginBottom: '1.5rem' }}>
               {showModal === 'add_product' ? 'Thêm NVL mới' : showModal === 'edit_product' ? 'Sửa thông tin hàng hóa' : showModal === 'import' ? `Nhập hàng: ${selectedProduct?.name}` : `Xuất hàng: ${selectedProduct?.name}`}
@@ -705,35 +704,90 @@ function Goods() {
                     </div>
                   </div>
                   {showModal === 'export' && (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                      <div>
-                        <label style={{ display: 'block', marginBottom: '4px', fontSize: '0.875rem', fontWeight: '500' }}>ID hàng gửi</label>
-                        <input
-                          type="text"
-                          placeholder="Nhập ID hàng gửi..."
-                          value={shippingReferenceId}
-                          onChange={e => setShippingReferenceId(e.target.value)}
-                        />
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginTop: '0.5rem' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <label style={{ fontSize: '0.875rem', fontWeight: '600' }}>
+                          Chọn hàng gửi liên kết (tùy chọn)
+                        </label>
+                        {selectedShippingId && (
+                          <button
+                            type="button"
+                            onClick={() => setSelectedShippingId(null)}
+                            style={{ fontSize: '0.75rem', color: '#ef4444', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}
+                          >
+                            Bỏ chọn
+                          </button>
+                        )}
                       </div>
 
-                      {shippingLookupLoading && (
-                        <div style={{ fontSize: '0.8125rem', color: 'var(--text-muted)' }}>
-                          Đang tìm hàng gửi...
-                        </div>
-                      )}
-
-                      {shippingReferenceError && (
-                        <div style={{ fontSize: '0.8125rem', color: '#dc2626' }}>
-                          {shippingReferenceError}
-                        </div>
-                      )}
-
-                      {shippingReference && (
-                        <div style={{ background: '#f8fafc', border: '1px solid var(--border)', borderRadius: '10px', padding: '0.75rem' }}>
-                          <div style={{ fontWeight: '700', color: 'var(--primary)', marginBottom: '6px' }}>#{shippingReference.id}</div>
-                          <div style={{ fontWeight: '600', marginBottom: '4px' }}>{shippingReference.product_name || 'Hàng không tên'}</div>
-                          <div style={{ fontSize: '0.8125rem', color: 'var(--text-muted)' }}>Số lượng: {shippingReference.quantity || '—'}</div>
-                          <div style={{ fontSize: '0.8125rem', color: 'var(--text-muted)' }}>Khách hàng: {shippingReference.customers?.name || '—'}</div>
+                      {shippingLoading ? (
+                        <div style={{ fontSize: '0.8125rem', color: 'var(--text-muted)', padding: '0.5rem 0' }}>Đang tải danh sách hàng đang xử lý...</div>
+                      ) : shippingList.length === 0 ? (
+                        <div style={{ fontSize: '0.8125rem', color: 'var(--text-muted)', padding: '0.5rem 0' }}>Không có hàng gửi nào đang xử lý.</div>
+                      ) : (
+                        <div style={{ maxHeight: '220px', overflowY: 'auto', border: '1px solid var(--border)', borderRadius: '8px' }}>
+                          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8125rem' }}>
+                            <thead style={{ background: '#f8fafc', position: 'sticky', top: 0, zIndex: 1, borderBottom: '1px solid var(--border)' }}>
+                              <tr>
+                                <th style={{ padding: '6px 10px', textAlign: 'center', width: '40px' }}>Chọn</th>
+                                <th style={{ padding: '6px 10px', textAlign: 'left', width: '50px' }}>ID</th>
+                                <th style={{ padding: '6px 10px', textAlign: 'left' }}>Tên hàng</th>
+                                <th style={{ padding: '6px 10px', textAlign: 'left' }}>Khách hàng</th>
+                                <th style={{ padding: '6px 10px', textAlign: 'center' }}>Trạng thái</th>
+                                <th style={{ padding: '6px 10px', textAlign: 'center' }}>SL gửi</th>
+                                <th style={{ padding: '6px 10px', textAlign: 'center' }}>Ngày gửi</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {shippingList.map(item => {
+                                const isSelected = selectedShippingId === item.id;
+                                const st = STATUS_LIST.find(s => s.id === item.status) || STATUS_LIST[0];
+                                return (
+                                  <tr
+                                    key={item.id}
+                                    onClick={() => handleToggleShippingSelect(item.id)}
+                                    style={{
+                                      borderBottom: '1px solid var(--border)',
+                                      cursor: 'pointer',
+                                      background: isSelected ? '#eff6ff' : 'transparent',
+                                      transition: 'background 0.15s'
+                                    }}
+                                  >
+                                    <td style={{ padding: '6px 10px', textAlign: 'center' }}>
+                                      <input
+                                        type="checkbox"
+                                        checked={isSelected}
+                                        onChange={() => handleToggleShippingSelect(item.id)}
+                                        onClick={e => e.stopPropagation()}
+                                        style={{ cursor: 'pointer' }}
+                                      />
+                                    </td>
+                                    <td style={{ padding: '6px 10px', fontWeight: '700', color: 'var(--primary)' }}>#{item.id}</td>
+                                    <td style={{ padding: '6px 10px', fontWeight: '500' }}>{item.product_name || '—'}</td>
+                                    <td style={{ padding: '6px 10px', color: 'var(--text-muted)' }}>{item.customers?.name || '—'}</td>
+                                    <td style={{ padding: '6px 10px', textAlign: 'center' }}>
+                                      <span style={{
+                                        fontSize: '0.7rem',
+                                        fontWeight: '700',
+                                        padding: '2px 8px',
+                                        borderRadius: '12px',
+                                        background: st.bg,
+                                        color: st.color,
+                                        border: `1px solid ${st.color}40`,
+                                        whiteSpace: 'nowrap'
+                                      }}>
+                                        {st.label}
+                                      </span>
+                                    </td>
+                                    <td style={{ padding: '6px 10px', textAlign: 'center', fontWeight: '600' }}>{item.quantity || '—'}</td>
+                                    <td style={{ padding: '6px 10px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.75rem' }}>
+                                      {item.date ? format(new Date(item.date), 'dd/MM/yyyy') : '—'}
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
                         </div>
                       )}
                     </div>

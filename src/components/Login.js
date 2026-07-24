@@ -40,7 +40,7 @@ const Login = ({ onLogin }) => {
     <div className="login-page">
       <div className="login-card fade-in">
         <div className="login-header">
-          <div className="login-logo">Xưởng May Pro</div>
+          <div className="login-logo">Xưởng May Vanni</div>
           <h1>Đăng nhập hệ thống</h1>
           <p>Hệ thống quản lý kho & doanh thu</p>
         </div>
@@ -99,7 +99,7 @@ const Login = ({ onLogin }) => {
         </form>
 
         <div className="login-footer">
-          &copy; {new Date().getFullYear()} Xưởng May Pro. All rights reserved.
+          &copy; {new Date().getFullYear()} Xưởng May Vanni. All rights reserved.
         </div>
       </div>
     </div>

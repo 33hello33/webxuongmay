@@ -24,7 +24,7 @@ function App() {
       try {
         const { user: savedUser, expiresAt } = JSON.parse(sessionDataStr);
         const now = new Date().getTime();
-        
+
         if (now < expiresAt) {
           setUser(savedUser);
         } else {
@@ -39,11 +39,11 @@ function App() {
     const handleGlobalClick = (e) => {
       // Check if the clicked element is an image
       if (e.target.tagName === 'IMG' && e.target.src && !e.target.closest('.image-viewer-container')) {
-        const isProductImage = e.target.closest('.card') || 
-                              e.target.closest('.modal-container') || 
-                              e.target.src.includes('supabase') || 
-                              e.target.src.includes('googleusercontent');
-        
+        const isProductImage = e.target.closest('.card') ||
+          e.target.closest('.modal-container') ||
+          e.target.src.includes('supabase') ||
+          e.target.src.includes('googleusercontent');
+
         if (isProductImage) {
           setPreviewImage(e.target.src);
         }
@@ -93,7 +93,7 @@ function App() {
     <div className="app-container">
       <header className="app-header">
         <div className="logo-section">
-          <div className="logo">Xưởng May Pro</div>
+          <div className="logo">Xưởng May Vanni</div>
           <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Hệ thống quản lý kho</span>
         </div>
 
@@ -143,7 +143,7 @@ function App() {
               <span>Hàng lỗi</span>
             </div>
           </button>
-          
+
           {user.role === 'Quản lý' && (
             <>
               <button
@@ -181,16 +181,16 @@ function App() {
 
         <div className="header-actions">
           <div style={{ position: 'relative' }}>
-            <button 
-              className="btn user-profile-btn" 
+            <button
+              className="btn user-profile-btn"
               onClick={() => setShowUserMenu(!showUserMenu)}
-              style={{ 
-                background: '#f1f5f9', 
-                color: 'var(--text-main)', 
-                borderRadius: '24px', 
+              style={{
+                background: '#f1f5f9',
+                color: 'var(--text-main)',
+                borderRadius: '24px',
                 padding: '4px 12px',
-                display: 'flex', 
-                alignItems: 'center', 
+                display: 'flex',
+                alignItems: 'center',
                 gap: '8px',
                 border: '1px solid var(--border)'
               }}
@@ -218,7 +218,7 @@ function App() {
               </div>
             )}
           </div>
-          
+
           <button className="btn" style={{ background: '#f1f5f9', color: 'var(--text-main)', borderRadius: '50%', width: '40px', height: '40px', padding: '0', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
             <Bell size={20} />
           </button>
@@ -231,8 +231,8 @@ function App() {
 
       {/* Global Image Viewer Modal */}
       {previewImage && (
-        <div 
-          className="image-viewer-overlay" 
+        <div
+          className="image-viewer-overlay"
           onClick={() => setPreviewImage(null)}
         >
           <div className="image-viewer-container" onClick={e => e.stopPropagation()}>
