@@ -650,8 +650,8 @@ function Goods() {
                           style={{ padding: '4px 8px', flex: 1, border: '1px solid var(--border)', borderRadius: '4px' }}
                         >
                           <option value="">Chọn người mua...</option>
-                          {uniqueBuyers.map(buyer => (
-                            <option key={buyer} value={buyer}>{buyer}</option>
+                          {customers.map(c => (
+                            <option key={c.id || c.name} value={c.name}>{c.name}</option>
                           ))}
                         </select>
                       </div>
